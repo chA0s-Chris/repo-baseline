@@ -194,17 +194,21 @@ The tool is a single-file C# app (`tool/sync.cs`, run with `dotnet run`) with th
 | Command | Effect |
 |---|---|
 | `init` | Creates the manifest, writes synced content, copies the created-once templates with names filled in, creates the ReSharper layer injection, and generates a strong-name key for `dotnet-nuget` repositories. Refuses to overwrite existing files unless asked to. |
-| `sync` | Updates synced content to the version in the manifest, or to a version given on the command line, which is then recorded in the manifest. |
-| `check` | Exits non-zero if synced content differs from the pinned release, if a managed block is missing or unknown, if the local ReSharper file does not inject the shared layer or redefines shared keys, or if a package from a synced `.props` file has no version. |
+| `sync` | Updates synced content to the version in the manifest, or to a version given on the command line, which is then recorded in the manifest. Removes blocks that no selected profile defines. Writes nothing if a block target file has malformed block markers, if a file the selected profiles use is not valid UTF-8, or if such a file has a symbolic link, a directory or a file in its path where the tool needs a regular file. |
+| `check` | Exits non-zero if synced content differs from the pinned release, if a managed block is missing, unknown or malformed, if a synced file is not a regular file inside the repository or a managed file is not valid UTF-8, if the local ReSharper file does not inject the shared layer or redefines shared keys, or if a package from a synced `.props` file has no version. |
+
+`sync` and `check` exist; `init` follows. Both exit with `0` on success, `1` when `check` has findings, and `2` on usage, manifest and source errors and when `sync` refuses to write. The README shows how to run them.
 
 Templates for created-once files may contain placeholders (solution name, package ID, repository URL); `init` fills them once. This does not contradict rule 1, because the repository owns these files from then on.
 
 ### Versions and distribution
 
-Releases are Git tags (`v1.0.0`, …). The tool reads profile content from a checkout of the pinned tag:
+Releases are Git tags (`v1.0.0`, …). The tool reads the profile content of the pinned tag from the Git objects of the `repo-baseline` checkout it runs from, so the checkout does not have to be at that tag. `--ref <git-ref>` reads the content of any other ref instead, for development and for pilots before a release; it never changes the manifest.
 
 - **Locally:** run the tool from a clone of `repo-baseline`, passing the target repository's path.
 - **In CI:** a shallow clone of the pinned tag (`git clone --depth 1 --branch v<version>`) followed by `check`. The repository is public, so this works from GitHub and from GitLab.
+
+The clone and the working directory must be outside the target repository. `dotnet run` reads `global.json` from the working directory and `Directory.Build.props`, `Directory.Packages.props` and `NuGet.config` from the directories above `tool/sync.cs`, so the target's build settings would otherwise apply to the tool.
 
 ## Rollout
 
