@@ -46,7 +46,7 @@ Nullability bugs are cheap to prevent at compile time and expensive to find at r
 
 **Status:** Confirmed
 
-`WRAP_LIMIT` is 180. The most recently maintained repositories use 180; 160 is an older value.
+The line length limit is 180, set as `max_line_length = 180` for `*.{cs,razor}` in `.editorconfig`. ReSharper reads it as its wrap limit (`WRAP_LIMIT`), so the ReSharper settings do not set it again. The most recently maintained repositories use 180; 160 is an older value.
 
 ### CS-6: Expression-bodied members are permitted, not enforced
 
@@ -141,6 +141,12 @@ Every published library has its own strong-name key; keys are never shared betwe
 
 When a repository moves to SDK 10 or later, its manifest moves to the root. The baseline tools are `jetbrains.resharper.globaltools` (`jb`) and `dotnet-coverage`.
 
+### BLD-6: Source Link comes from the .NET SDK
+
+**Status:** Confirmed
+
+The .NET SDK includes Source Link for GitHub and GitLab since .NET 8, so the baseline references no Source Link package. A repository on a self-hosted GitLab instance declares its host with a `SourceLinkGitLabHost` item in its local `src/Directory.Build.props`, because host names never appear in synced content.
+
 ## Tests
 
 ### TST-1: Shared test packages
@@ -214,10 +220,12 @@ Some existing repositories have a `MyProject.E2E.Tests` project without Aspire; 
 
 `cleanup_code.sh` and `inspect_code.sh` are the same in every .NET repository:
 
-- Both select changed, staged and untracked files, including rename destinations (`--diff-filter=ACMR`).
-- Both discover the solution file instead of hard-coding its name.
+- Both select changed, staged and untracked files, including rename destinations (`--diff-filter=ACMR`). `--all` selects the whole solution instead.
+- `inspect_code.sh` selects C# and Razor files. Scoped cleanup leaves Razor files out on purpose: on a Blazor codebase, ReSharper's Razor cleanup turned `String` into `string`, moved `[Inject]` attributes onto the property line and reformatted markup, so it does not apply the shared C# rules to Razor. Inspecting Razor files produced only sensible findings.
+- Scoped cleanup selects the MSBuild and packaging files (`.csproj`, `.slnx`, `.props`, `.targets`, `.nuspec`, `.config`) but not plain `.xml` files, which are often data such as test fixtures.
+- Both use the single `.slnx` file in the repository root instead of a hard-coded name, and fail when there is none or more than one.
 - `inspect_code.sh` reports warnings and errors by default, reads the XML report, and groups findings by project.
-- A repository can suppress specific inspection IDs through local configuration, for example `CS8618` when a Roslyn diagnostic suppressor already handles it but ReSharper does not run suppressors.
+- A repository can suppress specific inspection IDs through `inspection.suppressedIds` in `.repo-baseline.json`, for example `CSharpWarnings::CS8618` when a Roslyn diagnostic suppressor already handles it but ReSharper does not run suppressors. Entries are the full `TypeId` as the XML report writes it. `inspect_code.sh` reads the manifest with `jq` and requires it even when nothing is suppressed.
 
 ### TOOL-2: `dotnet format` is not used
 

@@ -1,0 +1,8 @@
+{
+  "blocks": [
+    { "id": "editorconfig", "file": ".editorconfig", "source": "blocks/editorconfig-core.editorconfig", "position": "start" },
+    { "id": "gitignore", "file": ".gitignore", "source": "blocks/gitignore-core.gitignore", "position": "start" },
+    { "id": "implementation-rules", "file": "AGENTS.md", "source": "blocks/agents-implementation-rules.md", "position": "end" },
+    { "id": "notes-from-agents", "file": "AGENTS.md", "source": "blocks/agents-notes-from-agents.md", "position": "end" }
+  ]
+}

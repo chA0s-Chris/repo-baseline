@@ -1,0 +1,5 @@
+{
+  "blocks": [
+    { "id": "code-review-ignore", "file": ".github/copilot-instructions.md", "source": "blocks/copilot-code-review-ignore.md", "position": "start" }
+  ]
+}

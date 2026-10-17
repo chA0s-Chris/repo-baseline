@@ -1,0 +1,9 @@
+# Build output, packages and coverage reports
+/artifacts/
+
+# Temporary files of any kind, for people and agents alike
+/tmp/
+
+# Editor backup and lock files
+~$*
+*~

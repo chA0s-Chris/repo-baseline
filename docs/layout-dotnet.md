@@ -24,7 +24,6 @@ Decisions referenced as `CS-…`, `BLD-…` and so on are recorded in [decisions
 │   ├── Common.props
 │   ├── Packaging.props           dotnet-nuget only
 │   ├── ReSharper.DotSettings
-│   ├── SourceLink.props          dotnet-nuget only
 │   └── Tests.props
 ├── ai-plans/
 │   └── AGENTS.md                 synced
@@ -77,8 +76,8 @@ Decisions referenced as `CS-…`, `BLD-…` and so on are recorded in [decisions
 | `.editorconfig` | block | The shared block comes first and starts with `root = true`. Local sections follow it: at least a `[*.cs]` section with the `file_header_template`, plus path-specific sections if needed. |
 | `<Name>.slnx.DotSettings` | created once | Injects `.repo-baseline/ReSharper.DotSettings` as a settings layer. Contains only local settings: dictionary words and naming abbreviations (CS-3). Must not redefine shared keys. |
 | `CODESTYLE.md` | synced | Human-readable code style. Repository-specific code style rules go into `AGENTS.md` or a nested `AGENTS.md`. |
-| `cleanup_code.sh` | synced | Applies the `Zorn` cleanup profile to changed, staged and untracked files (TOOL-1). |
-| `inspect_code.sh` | synced | Runs ReSharper inspections on changed files, on a branch (`--base`), or on the whole solution (`--all`). Its warnings and errors are what needs fixing; suggestions are ignored (CS-11). Suppressed inspection IDs come from `.repo-baseline.json`. |
+| `cleanup_code.sh` | synced | Applies the `Zorn` cleanup profile to changed, staged and untracked files, or to the whole solution with `--all` (TOOL-1). |
+| `inspect_code.sh` | synced | Runs ReSharper inspections on changed files, on a branch (`--base`), or on the whole solution (`--all`). Its warnings and errors are what needs fixing; suggestions are ignored (CS-11). Suppressed inspection IDs come from `.repo-baseline.json`, so the script needs `jq`. |
 | `dotnet-tools.json` | created once | In the root for SDK 10 or later, in `.config/dotnet-tools.json` for older SDKs (BLD-5). Contains at least `jetbrains.resharper.globaltools` and `dotnet-coverage`. Repositories add further tools such as `dotnet-ef`. |
 
 ### Agent instructions
@@ -146,7 +145,7 @@ Projects that should not be multi-targeted, such as benchmarks or tools, use `$(
 
 Contains the production projects, one directory per project, named after the project (`<Name>`, `<Name>.<Feature>`).
 
-- **`src/Directory.Build.props`** (created once) imports the root `Directory.Build.props` and sets `GenerateDocumentationFile` to `true`. It appends `$(AdditionalConstants)` to `DefineConstants`, so the build pipeline can set constants such as `NUGET_RELEASE`. Published libraries also import `.repo-baseline/Packaging.props` and `.repo-baseline/SourceLink.props`, and set package metadata: project URL, tags, and the package icon from `dist/`.
+- **`src/Directory.Build.props`** (created once) imports the root `Directory.Build.props` and sets `GenerateDocumentationFile` to `true`. It appends `$(AdditionalConstants)` to `DefineConstants`, so the build pipeline can set constants such as `NUGET_RELEASE`. Published libraries also import `.repo-baseline/Packaging.props` and set package metadata: project URL, tags, copyright, and the package icon from `dist/`. Source Link comes from the .NET SDK; a repository on a self-hosted GitLab instance adds a `SourceLinkGitLabHost` item for its host here (BLD-6).
 - **`src/Aspire/`** (optional) contains `MyProject.AppHost` and `MyProject.ServiceDefaults` for applications that use Aspire for local development and end-to-end tests (TST-5). In repositories that publish packages, `src/Aspire/Directory.Build.props` imports the parent file and sets `IsPackable` to `false`, so the pipeline does not pack the Aspire projects.
 - **`src/AGENTS.md`** (created once) gives an overview of the projects (one bullet per project with its responsibility) and the production code rules specific to the repository.
 

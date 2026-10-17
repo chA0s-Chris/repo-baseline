@@ -12,12 +12,22 @@ The project is in its design phase. Read `docs/design.md` before changing anythi
 | `docs/decisions.md` | The decisions behind the profile content, with their status and reasons |
 | `docs/layout-dotnet.md` | The standard layout of a .NET repository that uses the `dotnet` profile |
 | `ai-plans/` | Guided Coding plans and plan deviation files |
+| `profiles/` | Profile content: one directory per profile, as described under "Profile storage" in `docs/design.md` |
+| `tests/scripts/` | Tests for the shared code-style scripts |
 
-Profile content, the tool (`tool/sync.cs`) and the Renovate preset (`renovate/default.json`) do not exist yet.
+The tool (`tool/sync.cs`) and the Renovate preset (`renovate/default.json`) do not exist yet.
+
+## Local Development Commands
+
+| Purpose | Command |
+| --- | --- |
+| Test the shared code-style scripts | `bash tests/scripts/run.sh` |
+
+The script tests need bash, Git and `jq`. They run the scripts against a stub `dotnet`, so they cover argument handling, file selection and report filtering, but not ReSharper itself.
 
 ## Rules for This Repository
 
-- **This repository is public.** Never add content specific to an employer or client: project descriptions, internal host names, private package feeds, issue texts or copies of their files. Other repositories may serve as a reference for generic settings only.
+- **This repository is public.** Never add content specific to an employer or client: project descriptions, internal host names, private package feeds, issue texts or copies of their files. Other repositories may serve as a reference for generic settings only. Never name private repositories or their owners in this repository, its issues or its pull requests.
 - Treat decisions with the status **Confirmed** in `docs/decisions.md` as requirements. Change one only when the maintainer revisits it. Treat **Proposed** decisions as the default until they are confirmed or revised.
 - When a decision changes, update its entry instead of adding a contradicting one, and change the affected documents and profile files in the same commit.
 - Profile content follows the rules for synced content in `docs/design.md`: no variables, no employer or client details, UTF-8 without BOM and LF line endings, and one source per rule.

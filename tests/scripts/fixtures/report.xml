@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Shaped like the XML report of `dotnet jb inspectcode` 2026.2; findings are made up. -->
+<Report ToolsVersion="262.0.20260101.0">
+  <Information>
+    <Solution>Sample.slnx</Solution>
+    <InspectionScope>
+      <Element>Solution</Element>
+    </InspectionScope>
+  </Information>
+  <IssueTypes>
+    <IssueType Id="CSharpWarnings::CS8618" Category="Compiler Warnings" CategoryId="CompilerWarnings" Description="Non-nullable member is uninitialized." Severity="WARNING" WikiUrl="https://www.jetbrains.com/help/resharper/CSharpWarnings_CS8618.html" />
+    <IssueType Id="PossibleNullReferenceException" Category="Potential Code Quality Issues" CategoryId="CodeSmell" Description="Possible 'System.NullReferenceException'" Severity="WARNING" />
+  </IssueTypes>
+  <Issues>
+    <Project Name="Sample.Core">
+      <Issue TypeId="CSharpWarnings::CS8618" Severity="WARNING" File="src/Sample.Core/Widget.cs" TargetFramework="net10.0" Offset="210-214" Line="12" Message="Non-nullable property 'Name' is uninitialized." />
+      <Issue TypeId="PossibleNullReferenceException" Severity="WARNING" File="src/Sample.Core/Widget.cs" TargetFramework="net10.0" Offset="402-410" Line="20" Message="Possible 'System.NullReferenceException'" />
+    </Project>
+    <Project Name="Sample.Web">
+      <Issue TypeId="CSharpWarnings::CS8618" Severity="WARNING" File="src/Sample.Web/Page.cs" TargetFramework="net10.0" Offset="120-128" Line="7" Message="Non-nullable field '_service' is uninitialized." />
+    </Project>
+  </Issues>
+</Report>

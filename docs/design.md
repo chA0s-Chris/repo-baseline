@@ -29,11 +29,43 @@ Content is organized in profiles, and each repository selects the profiles that 
 |---|---|---|
 | `common` | every repository | `CLAUDE.md`, shared `AGENTS.md` blocks, `ai-plans/AGENTS.md`, `.editorconfig` core, `.gitignore` core |
 | `dotnet` | every .NET repository | C# `.editorconfig` rules, ReSharper settings, `CODESTYLE.md`, `cleanup_code.sh`, `inspect_code.sh`, shared MSBuild properties, layout templates |
-| `dotnet-nuget` | .NET repositories that publish packages | packaging properties, SourceLink, strong-name key handling |
-| `github` | repositories hosted on GitHub | `.github/copilot-instructions.md` block, GitHub SourceLink |
-| `gitlab` | repositories hosted on GitLab | GitLab SourceLink |
+| `dotnet-nuget` | .NET repositories that publish packages | packaging properties; `init` generates the strong-name key |
+| `github` | repositories hosted on GitHub | `.github/copilot-instructions.md` block |
+| `gitlab` | repositories hosted on GitLab | no content yet |
 
 The order of profiles in the manifest is the order in which their content is combined. Profiles for other languages can be added later without affecting existing ones.
+
+### Profile storage
+
+Each profile is a directory in this repository:
+
+```
+profiles/<profile>/
+  profile.json            block definitions
+  files/<target path>     whole files, written as they are
+  blocks/<fragment>       block fragments
+```
+
+Whole files keep their file mode: `sync` sets the executable bit for files that have it in the profile, and `check` reports a synced file whose executable bit differs.
+
+`profile.json` lists the blocks the profile contributes to:
+
+```json
+{
+  "blocks": [
+    { "id": "editorconfig", "file": ".editorconfig", "source": "blocks/editorconfig-core.editorconfig", "position": "start" }
+  ]
+}
+```
+
+| Field | Meaning |
+|---|---|
+| `id` | Block ID, used in the block markers |
+| `file` | Target file, relative to the repository root |
+| `source` | Fragment file, relative to the profile directory |
+| `position` | `start` or `end`: where a missing block is inserted |
+
+A fragment contains the block content without the markers. When several selected profiles define the same block ID for the same file, their fragments are joined in manifest profile order, separated by one empty line. For example, the `.editorconfig` block consists of the `common` fragment (`root = true`, `[*]` and the data files) followed by the `dotnet` fragment (MSBuild files and C#).
 
 ### Three kinds of content
 
@@ -75,7 +107,14 @@ The tool writes the file exactly as it is in the profile. Every synced whole fil
 # Managed by repo-baseline (https://github.com/chA0s-Chris/repo-baseline). Do not edit; change it there.
 ```
 
-Files that do not permit comments (JSON) carry no header; the manifest is the reference for them.
+| File type | Header |
+|---|---|
+| Shell scripts | `#` comment directly after the shebang line |
+| Markdown | HTML comment (`<!-- … -->`) on the first line |
+| `.props`, `.DotSettings` | XML comment (`<!-- … -->`) on the first line, before the root element |
+| JSON | none; the manifest is the reference |
+
+Blocks carry no header; their markers identify them.
 
 ### Managed blocks
 
@@ -87,7 +126,9 @@ Files that mix shared and local content contain marked blocks. The tool replaces
 <!-- END repo-baseline: code-style-and-inspections -->
 ```
 
-The comment syntax follows the file type: `<!-- -->` in Markdown, `#` in `.editorconfig` and `.gitignore`. A block that a profile defines but that the file does not contain is added at the position the profile specifies (for example, the start of the file). A block the file contains but no selected profile defines is reported by `check`.
+The comment syntax follows the file type: `<!-- -->` in Markdown, `#` in `.editorconfig` and `.gitignore`. A block the file contains but no selected profile defines is reported by `check`.
+
+The created-once templates already contain every block marker in the intended order, so `sync` normally only fills existing blocks. Inserting a missing block is the fallback for a profile that is added later: missing blocks are inserted at the `position` from `profile.json`, in manifest profile order and then in `profile.json` order, and the repository may move them afterwards. `check` does not verify block positions.
 
 This mechanism is used for:
 
@@ -100,10 +141,22 @@ This mechanism is used for:
 
 ReSharper settings cannot be split into blocks, but ReSharper can load additional settings files as layers:
 
-- The synced file `.repo-baseline/ReSharper.DotSettings` contains the cleanup profile, naming rules, file layout and all other shared settings.
+- The synced file `.repo-baseline/ReSharper.DotSettings` contains the shared settings that `.editorconfig` cannot express (rule 4): the cleanup profiles, the file layout and member order, naming rules, null-check pattern priorities, IDE behavior such as typing assist, and the settings-migration markers. Everything else, including the line length (`max_line_length`) and inspection severities, is in the `.editorconfig` block.
 - The repository's `<solution>.slnx.DotSettings` injects that file as a layer and otherwise contains only local settings, such as dictionary words and naming abbreviations.
 
-`init` creates the injection entries. `check` reports every key from the shared layer that the local file redefines, apart from the injection entries themselves. An existing repository contains such a duplicate: its cleanup profile exists in both the injected file and the solution's own file, and the two copies differ. Most likely an edit in the IDE was saved to the solution's own file. The pilot verifies which layer Rider saves to (TOOL-3); the README then explains how to edit shared settings, or how to move such a change into `repo-baseline`.
+`init` creates the injection entries. They consist of a file layer with the path of the shared file and a display name and priority for the layer:
+
+```xml
+<s:Boolean x:Key="/Default/Environment/InjectedLayers/FileInjectedLayer/=<GUID>/@KeyIndexDefined">True</s:Boolean>
+<s:String x:Key="/Default/Environment/InjectedLayers/FileInjectedLayer/=<GUID>/RelativePath/@EntryValue">..\.repo-baseline\ReSharper.DotSettings</s:String>
+<s:Boolean x:Key="/Default/Environment/InjectedLayers/InjectedLayerCustomization/=File<GUID>/@KeyIndexDefined">True</s:Boolean>
+<s:String x:Key="/Default/Environment/InjectedLayers/InjectedLayerCustomization/=File<GUID>/DisplayName/@EntryValue">repo-baseline</s:String>
+<s:Double x:Key="/Default/Environment/InjectedLayers/InjectedLayerCustomization/=File<GUID>/RelativePriority/@EntryValue">1</s:Double>
+```
+
+The path is relative to the settings file itself, so it starts with `..\` although both files are in the repository root; ReSharper on Linux accepts the backslashes. When the path points to a missing file, ReSharper creates an empty one instead of reporting an error, and the shared settings silently do not apply. `check` therefore verifies that the injection points to `.repo-baseline/ReSharper.DotSettings`.
+
+`check` reports every key from the shared layer that the local file redefines, apart from the injection entries themselves. An existing repository contains such a duplicate: its cleanup profile exists in both the injected file and the solution's own file, and the two copies differ. Most likely an edit in the IDE was saved to the solution's own file. The pilot verifies which layer Rider saves to (TOOL-3); the README then explains how to edit shared settings, or how to move such a change into `repo-baseline`.
 
 ### MSBuild imports
 
@@ -114,7 +167,10 @@ Shared build properties are synced as separate files under `.repo-baseline/` and
 | `.repo-baseline/Common.props` | root `Directory.Build.props` | language, nullability, warnings, `NoWarn`, `PreferredUILang` |
 | `.repo-baseline/Tests.props` | `tests/Directory.Build.props` | `IsTestProject`, `IsPackable=false`, shared test package references |
 | `.repo-baseline/Packaging.props` | `src/Directory.Build.props` | license, authors, documentation file, `EmbedUntrackedSources`, symbols |
-| `.repo-baseline/SourceLink.props` | `src/Directory.Build.props` | SourceLink package for the forge (from the `github` or `gitlab` profile) |
+
+Source Link needs no synced file: the .NET SDK includes it for GitHub and GitLab since .NET 8. A repository on a self-hosted GitLab instance declares its host with a `SourceLinkGitLabHost` item in its local `src/Directory.Build.props`, because host names never appear in synced content.
+
+Strong-name signing is not part of `Packaging.props`, because the key file name is repository-specific. The build pipeline signs when packing (BLD-4).
 
 The repository's own `Directory.Build.props` files are created once and stay local. They hold target frameworks and everything repository-specific, and they can override shared properties after the import.
 
@@ -139,7 +195,7 @@ The tool is a single-file C# app (`tool/sync.cs`, run with `dotnet run`) with th
 |---|---|
 | `init` | Creates the manifest, writes synced content, copies the created-once templates with names filled in, creates the ReSharper layer injection, and generates a strong-name key for `dotnet-nuget` repositories. Refuses to overwrite existing files unless asked to. |
 | `sync` | Updates synced content to the version in the manifest, or to a version given on the command line, which is then recorded in the manifest. |
-| `check` | Exits non-zero if synced content differs from the pinned release, if a managed block is missing or unknown, if the local ReSharper file redefines shared keys, or if a package from a synced `.props` file has no version. |
+| `check` | Exits non-zero if synced content differs from the pinned release, if a managed block is missing or unknown, if the local ReSharper file does not inject the shared layer or redefines shared keys, or if a package from a synced `.props` file has no version. |
 
 Templates for created-once files may contain placeholders (solution name, package ID, repository URL); `init` fills them once. This does not contradict rule 1, because the repository owns these files from then on.
 
