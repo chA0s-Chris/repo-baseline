@@ -43,6 +43,8 @@ fi
 # Untracked files are included on purpose: new files are the ones most in need of the code style,
 # and they are not staged yet at the point this script is normally run.
 # Include rename destinations as well, since staged renames can also contain code changes.
+# Razor files are left out on purpose: ReSharper's Razor cleanup does not apply the shared C# rules
+# to them and would rewrite them against those rules (TOOL-1).
 PATTERNS=$({ git diff --name-only --diff-filter=ACMR; git diff --name-only --cached --diff-filter=ACMR; git ls-files --others --exclude-standard; } | { grep '\.\(cs\|csproj\|json\|sh\|slnx\|config\)$' | sort -u | sed 's|^|**/|' | paste -sd ';' || true; })
 
 if [ -n "${PATTERNS}" ]; then

@@ -146,6 +146,14 @@ run ./cleanup_code.sh
 expect_status 0
 expect_call "jb cleanupcode --profile=Zorn --verbosity=ERROR --include=**/src/Modified.cs;**/src/NewName.cs;**/src/Untracked.cs Sample.slnx"
 
+test_case "cleanup: leaves Razor files out"
+new_repo Sample.slnx
+echo r > Page.razor
+run ./cleanup_code.sh
+expect_status 0
+expect_output "No matching files to process."
+expect_no_call
+
 test_case "cleanup: --all cleans the whole solution"
 new_repo Sample.slnx
 echo c > Untracked.cs
@@ -231,6 +239,14 @@ echo d > notes.json
 run ./inspect_code.sh
 expect_status 0
 expect_call "jb inspectcode --caches-home=tmp/inspectcode-caches --format=Xml --absolute-paths --output=tmp/inspectcode-report.xml --verbosity=ERROR --severity=WARNING --include=**/Changed.cs Sample.slnx"
+
+test_case "inspect: inspects changed Razor files"
+new_repo Sample.slnx
+echo r > Page.razor
+echo c > Changed.cs
+run ./inspect_code.sh
+expect_status 0
+expect_call "jb inspectcode --caches-home=tmp/inspectcode-caches --format=Xml --absolute-paths --output=tmp/inspectcode-report.xml --verbosity=ERROR --severity=WARNING --include=**/Changed.cs;**/Page.razor Sample.slnx"
 
 test_case "inspect: reports when no C# files changed"
 new_repo Sample.slnx

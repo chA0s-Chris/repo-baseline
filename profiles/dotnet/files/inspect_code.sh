@@ -14,8 +14,8 @@ fi
 CACHES_HOME="tmp/inspectcode-caches"
 REPORT_FILE="tmp/inspectcode-report.xml"
 
-# `inspectcode` reports semantic issues, not formatting ones, and its rule set only covers C#
-# in this solution. Formatting stays the job of cleanup_code.sh.
+# `inspectcode` reports semantic issues, not formatting ones, so the script selects C# and Razor
+# files only. Formatting stays the job of cleanup_code.sh.
 ARGUMENTS=(--caches-home="${CACHES_HOME}"
            --format=Xml
            --absolute-paths
@@ -156,7 +156,7 @@ if [ "${INSPECT_ALL}" -eq 0 ]; then
     PATTERNS=$({ if [ -n "${COMMITTED_PATHS}" ]; then printf '%s\n' "${COMMITTED_PATHS}"; fi
                  git diff --name-only --diff-filter=ACMR
                  git diff --name-only --cached --diff-filter=ACMR
-                 git ls-files --others --exclude-standard; } | { grep '\.cs$' | sort -u | sed 's|^|**/|' | paste -sd ';' || true; })
+                 git ls-files --others --exclude-standard; } | { grep '\.\(cs\|razor\)$' | sort -u | sed 's|^|**/|' | paste -sd ';' || true; })
 
     # Without --include, inspectcode analyzes the whole solution, so an empty file set must not
     # simply be passed through.
