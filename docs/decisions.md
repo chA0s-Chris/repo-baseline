@@ -222,6 +222,7 @@ Some existing repositories have a `MyProject.E2E.Tests` project without Aspire; 
 
 - Both select changed, staged and untracked files, including rename destinations (`--diff-filter=ACMR`). `--all` selects the whole solution instead.
 - `inspect_code.sh` selects C# and Razor files. Scoped cleanup leaves Razor files out on purpose: on a Blazor codebase, ReSharper's Razor cleanup turned `String` into `string`, moved `[Inject]` attributes onto the property line and reformatted markup, so it does not apply the shared C# rules to Razor. Inspecting Razor files produced only sensible findings.
+- Scoped cleanup selects the MSBuild and packaging files (`.csproj`, `.slnx`, `.props`, `.targets`, `.nuspec`, `.config`) but not plain `.xml` files, which are often data such as test fixtures.
 - Both use the single `.slnx` file in the repository root instead of a hard-coded name, and fail when there is none or more than one.
 - `inspect_code.sh` reports warnings and errors by default, reads the XML report, and groups findings by project.
 - A repository can suppress specific inspection IDs through `inspection.suppressedIds` in `.repo-baseline.json`, for example `CSharpWarnings::CS8618` when a Roslyn diagnostic suppressor already handles it but ReSharper does not run suppressors. Entries are the full `TypeId` as the XML report writes it. `inspect_code.sh` reads the manifest with `jq` and requires it even when nothing is suppressed.

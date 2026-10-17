@@ -146,6 +146,14 @@ run ./cleanup_code.sh
 expect_status 0
 expect_call "jb cleanupcode --profile=Zorn --verbosity=ERROR --include=**/src/Modified.cs;**/src/NewName.cs;**/src/Untracked.cs Sample.slnx"
 
+test_case "cleanup: cleans MSBuild files but leaves plain XML out"
+new_repo Sample.slnx
+echo p > Directory.Build.props
+echo x > data.xml
+run ./cleanup_code.sh
+expect_status 0
+expect_call "jb cleanupcode --profile=Zorn --verbosity=ERROR --include=**/Directory.Build.props Sample.slnx"
+
 test_case "cleanup: leaves Razor files out"
 new_repo Sample.slnx
 echo r > Page.razor
