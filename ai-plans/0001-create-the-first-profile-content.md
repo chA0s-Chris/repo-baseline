@@ -10,17 +10,17 @@ This plan creates the first content for the `common`, `dotnet`, `dotnet-nuget`, 
 
 ## Acceptance Criteria
 
-- [ ] `docs/design.md` documents how profiles are stored: the directory layout, the `profile.json` contract, how fragments that share a block ID are combined, how missing blocks are inserted, and where the managed-by header goes for each file type.
-- [ ] The profiles `common`, `dotnet`, `dotnet-nuget`, `github` and `gitlab` contain the synced files and blocks listed in Technical Details.
-- [ ] All synced content follows the rules for synced content: no variables, no employer or client details, UTF-8 without BOM, LF line endings, and the managed-by header where the file type permits comments.
-- [ ] Every confirmed decision that affects file content is reflected in it, and no rule is configured in both `.editorconfig` and the ReSharper settings.
-- [ ] `cleanup_code.sh` and `inspect_code.sh` find the single `.slnx` in the repository root, and fail with a clear message when there is none or more than one.
-- [ ] `cleanup_code.sh --all` applies the `Zorn` profile to every file in the solution.
-- [ ] `inspect_code.sh` omits findings whose `TypeId` is listed in `inspection.suppressedIds` of `.repo-baseline.json`, and fails with a clear message when `jq` is not available.
-- [ ] An automated test script exercises `cleanup_code.sh` and `inspect_code.sh` against a stubbed `dotnet`, covering solution discovery (none, one, several), the missing-`jq` error, `--all`, and `suppressedIds` filtering, and passes.
-- [ ] Applied by hand to a local Chaos.Mongo branch, the content gives a reviewed `cleanup_code.sh --all` diff, a Release build without warnings and a passing test suite. `cleanup_code.sh` and `inspect_code.sh` run without arguments. `inspect_code.sh --all -e=SUGGESTION` lists findings grouped by project, and after one of the listed `TypeId`s is added to `inspection.suppressedIds`, the same run no longer shows findings of that type.
-- [ ] Each finding from that validation is fixed in the profile content, recorded as a decision in `docs/decisions.md`, or tracked in a follow-up issue.
-- [ ] `docs/design.md`, `docs/decisions.md` and `docs/layout-dotnet.md` are consistent with the profile content, including the removal of `SourceLink.props`, the signing correction, and the wording of CS-5.
+- [x] `docs/design.md` documents how profiles are stored: the directory layout, the `profile.json` contract, how fragments that share a block ID are combined, how missing blocks are inserted, and where the managed-by header goes for each file type.
+- [x] The profiles `common`, `dotnet`, `dotnet-nuget`, `github` and `gitlab` contain the synced files and blocks listed in Technical Details.
+- [x] All synced content follows the rules for synced content: no variables, no employer or client details, UTF-8 without BOM, LF line endings, and the managed-by header where the file type permits comments.
+- [x] Every confirmed decision that affects file content is reflected in it, and no rule is configured in both `.editorconfig` and the ReSharper settings.
+- [x] `cleanup_code.sh` and `inspect_code.sh` find the single `.slnx` in the repository root, and fail with a clear message when there is none or more than one.
+- [x] `cleanup_code.sh --all` applies the `Zorn` profile to every file in the solution.
+- [x] `inspect_code.sh` omits findings whose `TypeId` is listed in `inspection.suppressedIds` of `.repo-baseline.json`, and fails with a clear message when `jq` is not available.
+- [x] An automated test script exercises `cleanup_code.sh` and `inspect_code.sh` against a stubbed `dotnet`, covering solution discovery (none, one, several), the missing-`jq` error, `--all`, and `suppressedIds` filtering, and passes.
+- [x] Applied by hand to a local Chaos.Mongo branch, the content gives a reviewed `cleanup_code.sh --all` diff, a Release build without warnings and a passing test suite. `cleanup_code.sh` and `inspect_code.sh` run without arguments. `inspect_code.sh --all -e=SUGGESTION` lists findings grouped by project, and after one of the listed `TypeId`s is added to `inspection.suppressedIds`, the same run no longer shows findings of that type.
+- [x] Each finding from that validation is fixed in the profile content, recorded as a decision in `docs/decisions.md`, or tracked in a follow-up issue.
+- [x] `docs/design.md`, `docs/decisions.md` and `docs/layout-dotnet.md` are consistent with the profile content, including the removal of `SourceLink.props`, the signing correction, and the wording of CS-5.
 
 ## Technical Details
 

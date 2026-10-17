@@ -1,0 +1,7 @@
+{
+  "blocks": [
+    { "id": "editorconfig", "file": ".editorconfig", "source": "blocks/editorconfig-dotnet.editorconfig", "position": "start" },
+    { "id": "gitignore", "file": ".gitignore", "source": "blocks/gitignore-dotnet.gitignore", "position": "start" },
+    { "id": "code-style-and-inspections", "file": "AGENTS.md", "source": "blocks/agents-code-style-and-inspections.md", "position": "end" }
+  ]
+}

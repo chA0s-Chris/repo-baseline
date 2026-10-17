@@ -2,7 +2,7 @@
 
 `repo-baseline` keeps the files that many repositories share in one place: code style and formatter settings, agent instructions, helper scripts, common build properties, and the templates and description of a standard repository layout. A small tool copies this content into repositories and checks in CI that it stays unchanged there.
 
-> **Status:** design phase. The design and the decisions behind the first profile content are written down; the profile content and the tool do not exist yet. Until `v1.0.0`, anything may change.
+> **Status:** design phase. The design, the decisions and the first profile content exist; the tool does not exist yet. Until `v1.0.0`, anything may change.
 
 ## Why
 

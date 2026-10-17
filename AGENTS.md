@@ -12,8 +12,18 @@ The project is in its design phase. Read `docs/design.md` before changing anythi
 | `docs/decisions.md` | The decisions behind the profile content, with their status and reasons |
 | `docs/layout-dotnet.md` | The standard layout of a .NET repository that uses the `dotnet` profile |
 | `ai-plans/` | Guided Coding plans and plan deviation files |
+| `profiles/` | Profile content: one directory per profile, as described under "Profile storage" in `docs/design.md` |
+| `tests/scripts/` | Tests for the shared code-style scripts |
 
-Profile content, the tool (`tool/sync.cs`) and the Renovate preset (`renovate/default.json`) do not exist yet.
+The tool (`tool/sync.cs`) and the Renovate preset (`renovate/default.json`) do not exist yet.
+
+## Local Development Commands
+
+| Purpose | Command |
+| --- | --- |
+| Test the shared code-style scripts | `bash tests/scripts/run.sh` |
+
+The script tests need bash, Git and `jq`. They run the scripts against a stub `dotnet`, so they cover argument handling, file selection and report filtering, but not ReSharper itself.
 
 ## Rules for This Repository
 
