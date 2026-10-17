@@ -92,7 +92,7 @@ The comment syntax follows the file type: `<!-- -->` in Markdown, `#` in `.edito
 This mechanism is used for:
 
 - **`.editorconfig`**: one block at the start of the file contains `root = true` and all shared sections. Local sections come after the block. Later sections override earlier ones, so a local `[*.cs]` section can set the `file_header_template` or adjust a shared rule. Path-specific sections are always local.
-- **`.gitignore`**: one block with the shared patterns; repository-specific patterns (such as the `.snk` name) come after it.
+- **`.gitignore`**: one block with the shared patterns; repository-specific patterns (such as the `.snk` name and, by default, `.idea/`; TOOL-4) come after it.
 - **`AGENTS.md`**: blocks for the sections that are the same everywhere, such as implementation rules and code style and inspections. Project description, commands and structure are local.
 - **`.github/copilot-instructions.md`**: the code review ignore list is a block; repository-specific review hints are local.
 

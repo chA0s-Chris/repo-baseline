@@ -198,7 +198,7 @@ Optional. `docs/` contains user and architecture documentation. `dist/` contains
 - `artifacts/` holds build output, packages and coverage reports.
 - `tmp/` is for temporary files of any kind, for people and agents alike.
 
-Both are in the shared `.gitignore` block.
+Both are in the shared `.gitignore` block. `.idea/` is ignored in the local part, which `init` creates (TOOL-4).
 
 ## Creating a New Repository
 
@@ -214,7 +214,7 @@ Required inputs:
 
 Steps:
 
-1. Run `init` with the profiles `common`, `dotnet`, `github` or `gitlab`, and `dotnet-nuget` for published libraries. It writes all synced and created-once files, generates the strong-name key for libraries, and adds the key's file name to the local part of `.gitignore`.
+1. Run `init` with the profiles `common`, `dotnet`, `github` or `gitlab`, and `dotnet-nuget` for published libraries. It writes all synced and created-once files, generates the strong-name key for libraries, and adds `.idea/` and the key's file name to the local part of `.gitignore`.
 2. Create the solution `<Name>.slnx` and the projects in `src/` and `tests/`, and add them to the solution.
 3. Fill in the local parts: project description and structure in `AGENTS.md`, the project overview in `src/AGENTS.md`, package metadata in `src/Directory.Build.props`, and the package versions in `Directory.Packages.props`.
 4. Add `build/` and the CI workflow if needed. For published libraries, store the Base64-encoded strong-name key as a CI secret.

@@ -90,6 +90,14 @@ Classes do not use primary constructors. When a class needs a constructor, it de
 
 The severity of an inspection therefore expresses whether it requires action. Inspections that are useful hints but often wrong in framework code, such as unused auto-property accessors or collections that are never updated, are set to suggestion level so they never require a fix. The same applies to the redundant-syntax inspections in CS-8. The shared block applies to `*.{cs,razor}` so Blazor code behaves the same as plain C#.
 
+### CS-12: Two-space indentation for data and documentation files
+
+**Status:** Confirmed
+
+JSON, YAML (`.yml` and `.yaml`), Markdown and the MSBuild and XML files (`.csproj`, `.slnx`, `.props`, `.config`, `.targets`, `.nuspec`, `.xml`) use two-space indentation. All other files, including Razor, CSS and shell scripts, use the four-space default from `[*]`.
+
+The `.yaml` extension is listed explicitly because an older glob covered only `.yml`, so files with the longer extension were indented differently from the others.
+
 ## Build
 
 ### BLD-1: Warnings are errors in Release builds and CI
@@ -140,6 +148,8 @@ When a repository moves to SDK 10 or later, its manifest moves to the root. The 
 **Status:** Confirmed
 
 Every test project references NUnit, NUnit3TestAdapter, NUnit.Analyzers, Microsoft.NET.Test.Sdk, FluentAssertions, coverlet.collector and JUnitTestLogger.
+
+`Microsoft.TestPlatform.TestHost` is not part of the shared set. `Microsoft.NET.Test.Sdk` already depends on it, so an explicit reference only adds a version that has to be kept in step. A repository that needs to pin it references it locally.
 
 The shared set contains no mocking framework. Moq-based mocking is being phased out: new tests use hand-written test doubles, and newer repositories do not reference Moq at all. Repositories that still contain older Moq-based tests reference Moq locally in `tests/Directory.Build.props` until those tests are migrated.
 
@@ -222,6 +232,14 @@ Some existing repositories have a `MyProject.E2E.Tests` project without Aspire; 
 The shared ReSharper settings are a separate synced file that each solution injects as a settings layer. Every repository keeps its `<Name>.slnx.DotSettings` under the default name, so ReSharper and Rider find it without configuration. That file holds only the layer injection and local settings.
 
 How Rider behaves when shared settings are edited in the IDE, in particular which layer it saves to, is verified during the pilot. The README then documents the editing workflow.
+
+### TOOL-4: Ignoring `.idea/` is a local decision
+
+**Status:** Confirmed
+
+The shared `.gitignore` block does not mention `.idea/`. `init` adds `.idea/` to the local part of `.gitignore`, so new repositories ignore the directory completely.
+
+Some repositories commit selected Rider files, such as scopes or project settings. Git cannot re-include a file inside an ignored directory, so a shared `.idea/` pattern would make that impossible. Such a repository replaces the local pattern with more specific ones.
 
 ### AGT-1: Agents report notes instead of editing `AGENTS.md`
 
