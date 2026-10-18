@@ -1305,7 +1305,7 @@ internal static class CheckCommand
     private const String InjectionPath = @"..\.repo-baseline\ReSharper.DotSettings";
     private const String CentralPackageFile = "Directory.Packages.props";
     private static readonly XNamespace Xaml = "http://schemas.microsoft.com/winfx/2006/xaml";
-    private static readonly Regex InjectionKey = new("^/Default/Environment/InjectedLayers/FileInjectedLayer/=[^/]+/RelativePath/@EntryValue$");
+    private static readonly Regex InjectionKey = new("^/Default/Environment/InjectedLayers/FileInjectedLayer/=(?<guid>[^/]+)/RelativePath/@EntryValue$");
 
     public static Int32 Run(String target, ExpectedContent expected)
     {
@@ -1354,9 +1354,11 @@ internal static class CheckCommand
             return;
         }
 
+        // BOM and line endings are only normalized for text; a file that is not valid UTF-8 must match byte for byte.
         var content = File.ReadAllBytes(path);
-        var identical = content.AsSpan().SequenceEqual(file.Content);
-        if (!identical && (!TextFile.TryDecode(content, out var actual) || (actual != TextFile.Decode(file.Content))))
+        var equivalent = content.AsSpan().SequenceEqual(file.Content)
+                         || (TextFile.TryDecode(file.Content, out var expectedText) && TextFile.TryDecode(content, out var actual) && (actual == expectedText));
+        if (!equivalent)
         {
             findings.Add($"{file.Path}: differs from {label}");
         }
@@ -1464,7 +1466,13 @@ internal static class CheckCommand
             return;
         }
 
-        if (!localSettings.Any(setting => InjectionKey.IsMatch(setting.Key) && (setting.Value == InjectionPath)))
+        // ReSharper only registers a file layer whose index entry is defined for the same GUID as its path.
+        var injected = localSettings
+                       .Select(setting => InjectionKey.Match(setting.Key) is { Success: true } match && (setting.Value == InjectionPath) ? match.Groups["guid"].Value : null)
+                       .OfType<String>()
+                       .Any(guid => localSettings.Any(setting => (setting.Key == $"{InjectedLayersPrefix}FileInjectedLayer/={guid}/@KeyIndexDefined")
+                                                                 && String.Equals(setting.Value, "True", StringComparison.OrdinalIgnoreCase)));
+        if (!injected)
         {
             findings.Add($"{localName}: does not inject {InjectionPath}");
         }

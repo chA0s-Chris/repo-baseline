@@ -278,6 +278,10 @@ printf 'Guide v1.' > "${TARGET}/docs/GUIDE.md"
 run_tool check "${TARGET}"
 expect_status 1
 expect_output "docs/GUIDE.md: differs from v1.0.0"
+# A file that is not valid UTF-8 is compared byte for byte, even with the decoder's replacement characters.
+printf '\xEF\xBF\xBDPNG\n\x1a\n\x00\xEF\xBF\xBD\xEF\xBF\xBD' > "${TARGET}/logo.png"
+run_tool check "${TARGET}"
+expect_output "logo.png: differs from v1.0.0"
 run_tool sync "${TARGET}"
 expect_status 0
 expect_no_output "AGENTS.md"
@@ -371,6 +375,13 @@ expect_output 'Sample.slnx.DotSettings: does not inject ..\.repo-baseline\ReShar
 expect_output "Sample.slnx.DotSettings: key /Default/Shared/A/@EntryValue: redefines a shared key"
 expect_no_output "/Default/Local/Word"
 expect_no_output "InjectedLayers"
+write "${TARGET}/Sample.slnx.DotSettings" "<wpf:ResourceDictionary xml:space=\"preserve\" ${xmlns}>" \
+    "  <s:String x:Key=\"${layer}/RelativePath/@EntryValue\">..\\.repo-baseline\\ReSharper.DotSettings</s:String>" \
+    "  <s:Boolean x:Key=\"/Default/Environment/InjectedLayers/FileInjectedLayer/=OTHER/@KeyIndexDefined\">True</s:Boolean>" \
+    '</wpf:ResourceDictionary>'
+run_tool check "${TARGET}"
+expect_status 1
+expect_output 'Sample.slnx.DotSettings: does not inject ..\.repo-baseline\ReSharper.DotSettings'
 write "${TARGET}/Sample.slnx.DotSettings" "<wpf:ResourceDictionary xml:space=\"preserve\" ${xmlns}>" \
     "  <s:Boolean x:Key=\"${layer}/@KeyIndexDefined\">True</s:Boolean>" \
     "  <s:String x:Key=\"${layer}/RelativePath/@EntryValue\">..\\.repo-baseline\\ReSharper.DotSettings</s:String>" \
