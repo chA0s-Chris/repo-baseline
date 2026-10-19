@@ -503,7 +503,7 @@ internal sealed class ReleaseSource
             var targetPath = path[filesDirectory.Length..];
             if (!IsRelativePath(targetPath))
             {
-                throw new ToolException($"{label}: {path} is not a valid target path; whole files need relative paths inside the repository without backslashes.");
+                throw new ToolException($"{label}: {path} is not a valid target path; whole files need relative paths inside the repository without backslashes or colons.");
             }
 
             files.Add(new SyncedFile(targetPath, ReadBlob(checkout, entry), executable, name));
@@ -583,8 +583,9 @@ internal sealed class ReleaseSource
         ToolException Invalid(String reason) => new($"{label}: {path} is invalid: {reason}.");
     }
 
+    // A colon would make a Windows drive path (`C:/…`) or an NTFS stream, which `Path.Combine` resolves outside the target.
     private static Boolean IsRelativePath(String path) =>
-        !path.StartsWith('/') && !path.Contains('\\') && path.Split('/').All(segment => segment is not ("" or "." or ".."));
+        !path.StartsWith('/') && !path.Contains('\\') && !path.Contains(':') && path.Split('/').All(segment => segment is not ("" or "." or ".."));
 
     private static Byte[] ReadBlob(String checkout, TreeEntry entry) => Git.Run(checkout, "cat-file", "blob", entry.Object);
 
@@ -759,23 +760,31 @@ internal sealed class ExpectedContent
     }
 
     /// <summary>
-    /// The manifest belongs to the target repository, and a target path cannot be a file and a directory at once.
+    /// The manifest belongs to the target repository, and a target path cannot be a file and a directory at once. Paths are
+    /// compared ignoring case, because the file systems of Windows and usually macOS would let them alias.
     /// </summary>
     private static void RejectCollidingPaths(String label, IEnumerable<Profile> selected, IEnumerable<String> files)
     {
-        var paths = files.Concat(selected.SelectMany(profile => profile.Blocks).Select(block => block.File)).ToHashSet(StringComparer.Ordinal);
-        if (paths.Contains(Manifest.FileName))
+        var paths = new Dictionary<String, String>(StringComparer.OrdinalIgnoreCase);
+        foreach (var path in files.Concat(selected.SelectMany(profile => profile.Blocks).Select(block => block.File)).Distinct(StringComparer.Ordinal))
+        {
+            if (!paths.TryAdd(path, path))
+            {
+                throw new ToolException($"{label}: {paths[path]} and {path} differ only in case.");
+            }
+        }
+
+        if (paths.ContainsKey(Manifest.FileName))
         {
             throw new ToolException($"{label}: a profile provides {Manifest.FileName}, which belongs to the target repository.");
         }
 
-        foreach (var path in paths)
+        foreach (var path in paths.Values)
         {
             var segments = path.Split('/');
             for (var count = 1; count < segments.Length; count++)
             {
-                var parent = String.Join('/', segments[..count]);
-                if (paths.Contains(parent))
+                if (paths.TryGetValue(String.Join('/', segments[..count]), out var parent))
                 {
                     throw new ToolException($"{label}: {parent} is a file, but {path} needs it to be a directory.");
                 }

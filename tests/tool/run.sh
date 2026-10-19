@@ -108,6 +108,11 @@ build_baseline() {
     fixture_ref fenced-fragment write "${profiles}/base/blocks/notes.md" '## Notes' '' '```markdown' \
         '<!-- BEGIN repo-baseline: example -->' '<!-- END repo-baseline: example -->' '```'
     fixture_ref backslash-path write "${profiles}/base/files/..\\outside.txt" 'Outside.'
+    fixture_ref drive-file write "${profiles}/base/files/C:/outside.txt" 'Outside.'
+    fixture_ref drive-block sed -i 's/"file": "AGENTS.md", "source": "blocks\/rules.md"/"file": "C:\/AGENTS.md", "source": "blocks\/rules.md"/' \
+        "${profiles}/base/profile.json"
+    fixture_ref case-collision write "${profiles}/extra/files/TOOL.sh" 'Echo.'
+    fixture_ref case-parent write "${profiles}/extra/files/Docs" 'A file where base needs a directory.'
     fixture_ref unclosed-fence write "${profiles}/base/blocks/notes.md" '## Notes' '' '```markdown'
 }
 
@@ -657,6 +662,18 @@ expect_output "manifest-file: a profile provides .repo-baseline.json, which belo
 run_tool check "${TARGET}" --ref backslash-path
 expect_status 2
 expect_output 'backslash-path: profiles/base/files/..\outside.txt is not a valid target path'
+run_tool check "${TARGET}" --ref drive-file
+expect_status 2
+expect_output "drive-file: profiles/base/files/C:/outside.txt is not a valid target path"
+run_tool check "${TARGET}" --ref drive-block
+expect_status 2
+expect_output "drive-block: profiles/base/profile.json is invalid: block rules needs relative 'file' and 'source' paths inside the repository."
+run_tool check "${TARGET}" --ref case-collision
+expect_status 2
+expect_output "case-collision: tool.sh and TOOL.sh differ only in case."
+run_tool check "${TARGET}" --ref case-parent
+expect_status 2
+expect_output "case-parent: Docs is a file, but docs/GUIDE.md needs it to be a directory."
 run_tool check "${TARGET}" --ref unclosed-fence
 expect_status 2
 expect_output "unclosed-fence: line 3 of the base fragment of block notes for AGENTS.md opens a code fence that is never closed."
