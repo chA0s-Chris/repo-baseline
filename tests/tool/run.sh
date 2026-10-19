@@ -107,6 +107,7 @@ build_baseline() {
     fixture_ref manifest-file write "${profiles}/base/files/.repo-baseline.json" '{}'
     fixture_ref fenced-fragment write "${profiles}/base/blocks/notes.md" '## Notes' '' '```markdown' \
         '<!-- BEGIN repo-baseline: example -->' '<!-- END repo-baseline: example -->' '```'
+    fixture_ref backslash-path write "${profiles}/base/files/..\\outside.txt" 'Outside.'
     fixture_ref unclosed-fence write "${profiles}/base/blocks/notes.md" '## Notes' '' '```markdown'
 }
 
@@ -653,6 +654,9 @@ expect_output "path-collision: docs is a file, but docs/GUIDE.md needs it to be 
 run_tool check "${TARGET}" --ref manifest-file
 expect_status 2
 expect_output "manifest-file: a profile provides .repo-baseline.json, which belongs to the target repository."
+run_tool check "${TARGET}" --ref backslash-path
+expect_status 2
+expect_output 'backslash-path: profiles/base/files/..\outside.txt is not a valid target path'
 run_tool check "${TARGET}" --ref unclosed-fence
 expect_status 2
 expect_output "unclosed-fence: line 3 of the base fragment of block notes for AGENTS.md opens a code fence that is never closed."

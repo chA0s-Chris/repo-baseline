@@ -499,7 +499,14 @@ internal sealed class ReleaseSource
                 "100755" => true,
                 _ => throw new ToolException($"{label}: {path} has mode {entry.Mode}; only regular files are supported.")
             };
-            files.Add(new SyncedFile(path[filesDirectory.Length..], ReadBlob(checkout, entry), executable, name));
+            // Git trees cannot contain `..` segments, but a backslash in a file name becomes a separator on Windows.
+            var targetPath = path[filesDirectory.Length..];
+            if (!IsRelativePath(targetPath))
+            {
+                throw new ToolException($"{label}: {path} is not a valid target path; whole files need relative paths inside the repository without backslashes.");
+            }
+
+            files.Add(new SyncedFile(targetPath, ReadBlob(checkout, entry), executable, name));
         }
 
         return new Profile(name, blocks, files);
