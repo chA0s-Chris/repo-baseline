@@ -445,7 +445,7 @@ internal sealed class ReleaseSource
         }
 
         var tree = Encoding.UTF8.GetString(treeOutput).Trim();
-        var entries = ListTree(checkout, tree);
+        var entries = ListTree(checkout, label, tree);
         var names = entries.Keys
                            .Select(path => path[ProfilesDirectory.Length..])
                            .Where(path => path.Contains('/'))
@@ -461,9 +461,14 @@ internal sealed class ReleaseSource
         return new ReleaseSource(label, profiles);
     }
 
-    private static Dictionary<String, TreeEntry> ListTree(String checkout, String tree)
+    private static Dictionary<String, TreeEntry> ListTree(String checkout, String label, String tree)
     {
-        var output = Encoding.UTF8.GetString(Git.Run(checkout, "ls-tree", "-r", "-z", tree, "--", ProfilesDirectory));
+        // A lenient decode would turn invalid bytes into U+FFFD and write the file under another name.
+        if (!TextFile.TryDecodeExact(Git.Run(checkout, "ls-tree", "-r", "-z", tree, "--", ProfilesDirectory), out var output))
+        {
+            throw new ToolException($"{label}: a path under {ProfilesDirectory} is not valid UTF-8.");
+        }
+
         var entries = new Dictionary<String, TreeEntry>(StringComparer.Ordinal);
         foreach (var record in output.Split('\0', StringSplitOptions.RemoveEmptyEntries))
         {
@@ -895,9 +900,19 @@ internal static class TextFile
     /// </summary>
     public static Boolean TryDecode(Byte[] content, out String text)
     {
+        var decoded = TryDecodeExact(WithoutBom(content), out text);
+        text = text.Replace("\r\n", "\n");
+        return decoded;
+    }
+
+    /// <summary>
+    /// Decodes strict UTF-8 without removing a BOM or changing line endings.
+    /// </summary>
+    public static Boolean TryDecodeExact(Byte[] content, out String text)
+    {
         try
         {
-            text = StrictUtf8.GetString(WithoutBom(content)).Replace("\r\n", "\n");
+            text = StrictUtf8.GetString(content);
             return true;
         }
         catch (DecoderFallbackException)
@@ -1348,6 +1363,7 @@ internal static class CheckCommand
     private const String InjectionPath = @"..\.repo-baseline\ReSharper.DotSettings";
     private const String CentralPackageFile = "Directory.Packages.props";
     private static readonly XNamespace Xaml = "http://schemas.microsoft.com/winfx/2006/xaml";
+    private static readonly XNamespace Wpf = "http://schemas.microsoft.com/winfx/2006/xaml/presentation";
     private static readonly Regex InjectionKey = new(@"^/Default/Environment/InjectedLayers/FileInjectedLayer/=(?<guid>[^/]+)/RelativePath/@EntryValue\z");
 
     public static Int32 Run(String target, ExpectedContent expected)
@@ -1500,12 +1516,16 @@ internal static class CheckCommand
             return;
         }
 
-        var sharedKeys = ReadSettings(shared.Content)
-                         ?? throw new ToolException($"{expected.Label}: {SharedReSharperSettings} is not valid XML.");
-        var localSettings = ReadSettings(File.ReadAllBytes(localPath));
-        if (localSettings is null)
+        var (sharedKeys, sharedProblem) = ReadSettings(shared.Content);
+        if (sharedProblem is not null)
         {
-            findings.Add($"{localName}: not valid XML");
+            throw new ToolException($"{expected.Label}: {SharedReSharperSettings}: {sharedProblem}.");
+        }
+
+        var (localSettings, localProblem) = ReadSettings(File.ReadAllBytes(localPath));
+        if (localProblem is not null)
+        {
+            findings.Add($"{localName}: {localProblem}");
             return;
         }
 
@@ -1528,26 +1548,35 @@ internal static class CheckCommand
                           .Select(key => $"{localName}: key {key}: redefines a shared key"));
     }
 
-    private static List<(String Key, String Value)>? ReadSettings(Byte[] content)
+    /// <summary>
+    /// Reads the settings of a DotSettings file: the keyed direct children of its <c>wpf:ResourceDictionary</c> root.
+    /// </summary>
+    private static (List<(String Key, String Value)> Settings, String? Problem) ReadSettings(Byte[] content)
     {
         try
         {
             // Invalid UTF-8 counts as invalid XML, as it does for ReSharper; a lenient decode would hide it.
             if (!TextFile.TryDecode(content, out var text))
             {
-                return null;
+                return ([], "not valid XML");
             }
 
-            return XDocument.Parse(text)
-                            .Descendants()
-                            .Select(element => (Key: (String?)element.Attribute(Xaml + "Key"), element.Value))
-                            .Where(setting => setting.Key is not null)
-                            .Select(setting => (setting.Key ?? String.Empty, setting.Value))
-                            .ToList();
+            var root = XDocument.Parse(text).Root;
+            if ((root is null) || (root.Name != Wpf + "ResourceDictionary"))
+            {
+                return ([], "has no wpf:ResourceDictionary root");
+            }
+
+            var settings = root.Elements()
+                               .Select(element => (Key: (String?)element.Attribute(Xaml + "Key"), element.Value))
+                               .Where(setting => setting.Key is not null)
+                               .Select(setting => (setting.Key ?? String.Empty, setting.Value))
+                               .ToList();
+            return (settings, null);
         }
         catch (XmlException)
         {
-            return null;
+            return ([], "not valid XML");
         }
     }
 

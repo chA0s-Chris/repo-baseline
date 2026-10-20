@@ -125,6 +125,7 @@ build_baseline() {
     fixture_ref console-device write "${profiles}/base/files/docs/"'CONIN$.md' 'Console.'
     fixture_ref newline-id sed -i 's/"id": "rules"/"id": "rules\\n"/' "${profiles}/base/profile.json"
     fixture_ref normalization-collision normalization_pair "${profiles}"
+    fixture_ref latin1-path latin1_file "${profiles}/base/files/docs/$(printf 'x\xe4').md"
     fixture_ref unclosed-fence write "${profiles}/base/blocks/notes.md" '## Notes' '' '```markdown'
 }
 
@@ -437,6 +438,10 @@ printf '<!-- \xE4 -->\n' >> "${TARGET}/Sample.slnx.DotSettings"
 run_tool check "${TARGET}"
 expect_status 1
 expect_output "Sample.slnx.DotSettings: not valid XML"
+sed -e 's/wpf:ResourceDictionary/Settings/g' "${WORK}/settings-${TESTS}" > "${TARGET}/Sample.slnx.DotSettings"
+run_tool check "${TARGET}"
+expect_status 1
+expect_output "Sample.slnx.DotSettings: has no wpf:ResourceDictionary root"
 cp "${WORK}/settings-${TESTS}" "${TARGET}/Sample.slnx.DotSettings"
 
 test_case "check: every package of a synced .props file needs a PackageVersion"
@@ -767,6 +772,9 @@ expect_output 'console-device: profiles/base/files/docs/CONIN$.md is not a valid
 run_tool check "${TARGET}" --ref newline-id
 expect_status 2
 expect_output "is not a valid block ID."
+run_tool check "${TARGET}" --ref latin1-path
+expect_status 2
+expect_output "latin1-path: a path under profiles/ is not valid UTF-8."
 run_tool check "${TARGET}" --ref unclosed-fence
 expect_status 2
 expect_output "unclosed-fence: line 3 of the base fragment of block notes for AGENTS.md opens a code fence that is never closed."
