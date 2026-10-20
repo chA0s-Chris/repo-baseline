@@ -196,7 +196,8 @@ internal sealed record Options(String Command, String TargetPath, String? Versio
 
 internal static class Versions
 {
-    private static readonly Regex Pattern = new("^[0-9A-Za-z][0-9A-Za-z.+-]*$");
+    // `\z` instead of `$`, which also matches before a final newline.
+    private static readonly Regex Pattern = new(@"^[0-9A-Za-z][0-9A-Za-z.+-]*\z");
 
     public static Boolean IsValid(String version) => Pattern.IsMatch(version);
 }
@@ -422,7 +423,7 @@ internal sealed record Profile(String Name, IReadOnlyList<BlockDefinition> Block
 internal sealed class ReleaseSource
 {
     private const String ProfilesDirectory = "profiles/";
-    private static readonly Regex ReservedName = new(@"^(CON|PRN|AUX|NUL|COM[1-9¹²³]|LPT[1-9¹²³])(\..*)?$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+    private static readonly Regex ReservedName = new(@"^(CON|PRN|AUX|NUL|CONIN\$|CONOUT\$|COM[1-9¹²³]|LPT[1-9¹²³])(\..*)?\z", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
 
     private ReleaseSource(String label, IReadOnlyDictionary<String, Profile> profiles)
     {
@@ -710,7 +711,8 @@ internal static class MarkdownFences
 
 internal static class BlockIds
 {
-    private static readonly Regex Pattern = new("^[A-Za-z0-9][A-Za-z0-9._-]*$");
+    // `\z` instead of `$`, which also matches before a final newline.
+    private static readonly Regex Pattern = new(@"^[A-Za-z0-9][A-Za-z0-9._-]*\z");
 
     public static Boolean IsValid(String id) => Pattern.IsMatch(id);
 }

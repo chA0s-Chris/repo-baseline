@@ -120,6 +120,10 @@ build_baseline() {
     fixture_ref symlink-fragment symlink_file "${profiles}/base/blocks/notes.md" rules.md
     fixture_ref forbidden-character write "${profiles}/base/files/docs/a?.md" 'Question.'
     fixture_ref superscript-device write "${profiles}/base/files/docs/COM¹.md" 'Device.'
+    fixture_ref dotdot-block sed -i 's/"file": "AGENTS.md", "source": "blocks\/rules.md"/"file": "..\/outside.md", "source": "blocks\/rules.md"/' \
+        "${profiles}/base/profile.json"
+    fixture_ref console-device write "${profiles}/base/files/docs/"'CONIN$.md' 'Console.'
+    fixture_ref newline-id sed -i 's/"id": "rules"/"id": "rules\\n"/' "${profiles}/base/profile.json"
     fixture_ref unclosed-fence write "${profiles}/base/blocks/notes.md" '## Notes' '' '```markdown'
 }
 
@@ -726,6 +730,15 @@ run_tool check "${TARGET}" --ref superscript-device
 expect_status 2
 expect_output "superscript-device: profiles/base/files/docs/COM"
 expect_output ".md is not a valid target path"
+run_tool check "${TARGET}" --ref dotdot-block
+expect_status 2
+expect_output "dotdot-block: profiles/base/profile.json is invalid: block rules needs relative 'file' and 'source' paths inside the repository."
+run_tool check "${TARGET}" --ref console-device
+expect_status 2
+expect_output 'console-device: profiles/base/files/docs/CONIN$.md is not a valid target path'
+run_tool check "${TARGET}" --ref newline-id
+expect_status 2
+expect_output "is not a valid block ID."
 run_tool check "${TARGET}" --ref unclosed-fence
 expect_status 2
 expect_output "unclosed-fence: line 3 of the base fragment of block notes for AGENTS.md opens a code fence that is never closed."
@@ -821,6 +834,10 @@ write "${TARGET}/.repo-baseline.json" '{ "version": "v", "profiles": ["base"] }'
 run_tool check "${TARGET}"
 expect_status 2
 expect_output "is invalid: 'v' is not a valid version."
+write "${TARGET}/.repo-baseline.json" '{ "version": "1.0.0\n", "profiles": ["base"] }'
+run_tool check "${TARGET}"
+expect_status 2
+expect_output "is not a valid version."
 write "${TARGET}/.repo-baseline.json" '{ "version": "1.1.0~1", "profiles": ["base"] }'
 run_tool check "${TARGET}"
 expect_status 2
