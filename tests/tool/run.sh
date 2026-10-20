@@ -124,6 +124,7 @@ build_baseline() {
         "${profiles}/base/profile.json"
     fixture_ref console-device write "${profiles}/base/files/docs/"'CONIN$.md' 'Console.'
     fixture_ref newline-id sed -i 's/"id": "rules"/"id": "rules\\n"/' "${profiles}/base/profile.json"
+    fixture_ref normalization-collision normalization_pair "${profiles}"
     fixture_ref unclosed-fence write "${profiles}/base/blocks/notes.md" '## Notes' '' '```markdown'
 }
 
@@ -138,6 +139,12 @@ broken_profile() {
 symlink_file() {
     rm "$1"
     ln -s "$2" "$1"
+}
+
+# Writes the same file name in composed (base) and decomposed (extra) Unicode form.
+normalization_pair() {
+    write "$1/base/files/docs/$(printf '\xc3\xa9').md" 'Composed.'
+    write "$1/extra/files/docs/$(printf 'e\xcc\x81').md" 'Decomposed.'
 }
 
 # Writes a file that is not valid UTF-8.
@@ -417,6 +424,12 @@ write "${TARGET}/Sample.slnx.DotSettings" "<wpf:ResourceDictionary xml:space=\"p
     '</wpf:ResourceDictionary>'
 run_tool check "${TARGET}"
 expect_status 0
+cp "${TARGET}/Sample.slnx.DotSettings" "${WORK}/settings-${TESTS}"
+printf '<!-- \xE4 -->\n' >> "${TARGET}/Sample.slnx.DotSettings"
+run_tool check "${TARGET}"
+expect_status 1
+expect_output "Sample.slnx.DotSettings: not valid XML"
+cp "${WORK}/settings-${TESTS}" "${TARGET}/Sample.slnx.DotSettings"
 
 test_case "check: every package of a synced .props file needs a PackageVersion"
 new_target '["net"]'
@@ -433,6 +446,10 @@ run_tool check "${TARGET}"
 expect_status 1
 expect_no_output "package NUnit"
 expect_output ".repo-baseline/Tests.props: package FluentAssertions: no PackageVersion in Directory.Packages.props"
+printf '<!-- \xE4 -->\n' >> "${TARGET}/Directory.Packages.props"
+run_tool check "${TARGET}"
+expect_status 1
+expect_output "Directory.Packages.props: not valid XML"
 
 test_case "sync: sets and clears only the executable bit"
 new_target '["base"]'
@@ -704,13 +721,16 @@ expect_status 2
 expect_output "drive-block: profiles/base/profile.json is invalid: block rules needs relative 'file' and 'source' paths inside the repository."
 run_tool check "${TARGET}" --ref case-collision
 expect_status 2
-expect_output "case-collision: tool.sh and TOOL.sh differ only in case."
+expect_output "case-collision: tool.sh and TOOL.sh differ only in case or Unicode normalization."
 run_tool check "${TARGET}" --ref case-parent
 expect_status 2
 expect_output "case-parent: Docs is a file, but docs/GUIDE.md needs it to be a directory."
 run_tool check "${TARGET}" --ref case-unselected
 expect_status 2
-expect_output "case-unselected: .github/Review.md and .github/review.md differ only in case."
+expect_output "case-unselected: .github/Review.md and .github/review.md differ only in case or Unicode normalization."
+run_tool check "${TARGET}" --ref normalization-collision
+expect_status 2
+expect_output "differ only in case or Unicode normalization."
 run_tool check "${TARGET}" --ref latin1-fragment
 expect_status 2
 expect_output "latin1-fragment: fragment profiles/base/blocks/notes.md of block notes is not valid UTF-8."

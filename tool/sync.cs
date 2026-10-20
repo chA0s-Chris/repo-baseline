@@ -786,7 +786,8 @@ internal sealed class ExpectedContent
 
     /// <summary>
     /// The manifest belongs to the target repository, and a target path cannot be a file and a directory at once. Paths are
-    /// compared ignoring case, because the file systems of Windows and usually macOS would let them alias. The selected whole
+    /// compared ignoring case and Unicode normalization, because the file systems of Windows and usually macOS would let them
+    /// alias. The selected whole
     /// files are checked together with the block targets of every profile, because all block targets are scanned.
     /// </summary>
     private static void RejectCollidingPaths(String label, IEnumerable<Profile> profiles, IEnumerable<String> selectedFiles)
@@ -794,9 +795,9 @@ internal sealed class ExpectedContent
         var paths = new Dictionary<String, String>(StringComparer.OrdinalIgnoreCase);
         foreach (var path in selectedFiles.Concat(profiles.SelectMany(profile => profile.Blocks).Select(block => block.File)).Distinct(StringComparer.Ordinal))
         {
-            if (!paths.TryAdd(path, path))
+            if (!paths.TryAdd(path.Normalize(NormalizationForm.FormC), path))
             {
-                throw new ToolException($"{label}: {paths[path]} and {path} differ only in case.");
+                throw new ToolException($"{label}: {paths[path.Normalize(NormalizationForm.FormC)]} and {path} differ only in case or Unicode normalization.");
             }
         }
 
@@ -810,7 +811,7 @@ internal sealed class ExpectedContent
             var segments = path.Split('/');
             for (var count = 1; count < segments.Length; count++)
             {
-                if (paths.TryGetValue(String.Join('/', segments[..count]), out var parent))
+                if (paths.TryGetValue(String.Join('/', segments[..count]).Normalize(NormalizationForm.FormC), out var parent))
                 {
                     throw new ToolException($"{label}: {parent} is a file, but {path} needs it to be a directory.");
                 }
@@ -1531,7 +1532,13 @@ internal static class CheckCommand
     {
         try
         {
-            return XDocument.Parse(TextFile.Decode(content))
+            // Invalid UTF-8 counts as invalid XML, as it does for ReSharper; a lenient decode would hide it.
+            if (!TextFile.TryDecode(content, out var text))
+            {
+                return null;
+            }
+
+            return XDocument.Parse(text)
                             .Descendants()
                             .Select(element => (Key: (String?)element.Attribute(Xaml + "Key"), element.Value))
                             .Where(setting => setting.Key is not null)
@@ -1580,7 +1587,12 @@ internal static class CheckCommand
     {
         try
         {
-            return XDocument.Parse(TextFile.Decode(content))
+            if (!TextFile.TryDecode(content, out var text))
+            {
+                return null;
+            }
+
+            return XDocument.Parse(text)
                             .Descendants()
                             .Where(element => element.Name.LocalName == itemName)
                             .Select(element => (String?)element.Attribute("Include"))
