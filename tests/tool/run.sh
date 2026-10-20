@@ -417,6 +417,14 @@ write "${TARGET}/Sample.slnx.DotSettings" "<wpf:ResourceDictionary xml:space=\"p
 run_tool check "${TARGET}"
 expect_status 1
 expect_output 'Sample.slnx.DotSettings: does not inject ..\.repo-baseline\ReSharper.DotSettings'
+# A key with an encoded trailing newline is a different key, which ReSharper does not recognize.
+write "${TARGET}/Sample.slnx.DotSettings" "<wpf:ResourceDictionary xml:space=\"preserve\" ${xmlns}>" \
+    "  <s:Boolean x:Key=\"${layer}/@KeyIndexDefined\">True</s:Boolean>" \
+    "  <s:String x:Key=\"${layer}/RelativePath/@EntryValue&#xA;\">..\\.repo-baseline\\ReSharper.DotSettings</s:String>" \
+    '</wpf:ResourceDictionary>'
+run_tool check "${TARGET}"
+expect_status 1
+expect_output 'Sample.slnx.DotSettings: does not inject ..\.repo-baseline\ReSharper.DotSettings'
 write "${TARGET}/Sample.slnx.DotSettings" "<wpf:ResourceDictionary xml:space=\"preserve\" ${xmlns}>" \
     "  <s:Boolean x:Key=\"${layer}/@KeyIndexDefined\">True</s:Boolean>" \
     "  <s:String x:Key=\"${layer}/RelativePath/@EntryValue\">..\\.repo-baseline\\ReSharper.DotSettings</s:String>" \

@@ -1348,7 +1348,7 @@ internal static class CheckCommand
     private const String InjectionPath = @"..\.repo-baseline\ReSharper.DotSettings";
     private const String CentralPackageFile = "Directory.Packages.props";
     private static readonly XNamespace Xaml = "http://schemas.microsoft.com/winfx/2006/xaml";
-    private static readonly Regex InjectionKey = new("^/Default/Environment/InjectedLayers/FileInjectedLayer/=(?<guid>[^/]+)/RelativePath/@EntryValue$");
+    private static readonly Regex InjectionKey = new(@"^/Default/Environment/InjectedLayers/FileInjectedLayer/=(?<guid>[^/]+)/RelativePath/@EntryValue\z");
 
     public static Int32 Run(String target, ExpectedContent expected)
     {
