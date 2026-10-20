@@ -422,7 +422,7 @@ internal sealed record Profile(String Name, IReadOnlyList<BlockDefinition> Block
 internal sealed class ReleaseSource
 {
     private const String ProfilesDirectory = "profiles/";
-    private static readonly Regex BlockIdPattern = new("^[A-Za-z0-9][A-Za-z0-9._-]*$");
+    private static readonly Regex ReservedName = new(@"^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(\..*)?$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
 
     private ReleaseSource(String label, IReadOnlyDictionary<String, Profile> profiles)
     {
@@ -503,7 +503,7 @@ internal sealed class ReleaseSource
             var targetPath = path[filesDirectory.Length..];
             if (!IsRelativePath(targetPath))
             {
-                throw new ToolException($"{label}: {path} is not a valid target path; whole files need relative paths inside the repository without backslashes or colons.");
+                throw new ToolException($"{label}: {path} is not a valid target path; whole files need relative paths inside the repository that are valid on Windows, too.");
             }
 
             files.Add(new SyncedFile(targetPath, ReadBlob(checkout, entry), executable, name));
@@ -553,7 +553,7 @@ internal sealed class ReleaseSource
                     "end" => BlockPosition.End,
                     var other => throw Invalid($"block {id} has position '{other}'; expected 'start' or 'end'")
                 };
-                if (!BlockIdPattern.IsMatch(id))
+                if (!BlockIds.IsValid(id))
                 {
                     throw Invalid($"'{id}' is not a valid block ID");
                 }
@@ -589,8 +589,10 @@ internal sealed class ReleaseSource
     }
 
     // A colon would make a Windows drive path (`C:/…`) or an NTFS stream, which `Path.Combine` resolves outside the target.
+    // Device names such as `NUL` and names ending in a dot or space do not address a regular file on Windows.
     private static Boolean IsRelativePath(String path) =>
-        !path.StartsWith('/') && !path.Contains('\\') && !path.Contains(':') && path.Split('/').All(segment => segment is not ("" or "." or ".."));
+        !path.StartsWith('/') && !path.Contains('\\') && !path.Contains(':')
+        && path.Split('/').All(segment => (segment.Length > 0) && !segment.EndsWith('.') && !segment.EndsWith(' ') && !ReservedName.IsMatch(segment));
 
     private static Byte[] ReadBlob(String checkout, TreeEntry entry) => Git.Run(checkout, "cat-file", "blob", entry.Object);
 
@@ -631,8 +633,9 @@ internal sealed record MarkerSyntax(String Prefix, String Suffix, Boolean Fenced
             return null;
         }
 
+        // Anything else, such as `foo --> trailing`, is a near miss, so the file counts as malformed.
         var id = text[start.Length..^Suffix.Length].Trim();
-        return id.Length > 0 ? id : null;
+        return BlockIds.IsValid(id) ? id : null;
     }
 
     /// <summary>
@@ -695,6 +698,13 @@ internal static class MarkdownFences
 
         return fenced;
     }
+}
+
+internal static class BlockIds
+{
+    private static readonly Regex Pattern = new("^[A-Za-z0-9][A-Za-z0-9._-]*$");
+
+    public static Boolean IsValid(String id) => Pattern.IsMatch(id);
 }
 
 internal sealed record ExpectedBlock(String Id, String Content, BlockPosition Position);

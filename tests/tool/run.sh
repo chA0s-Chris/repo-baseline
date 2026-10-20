@@ -115,6 +115,8 @@ build_baseline() {
     fixture_ref case-parent write "${profiles}/extra/files/Docs" 'A file where base needs a directory.'
     fixture_ref case-unselected write "${profiles}/base/files/.github/Review.md" 'Review.'
     fixture_ref latin1-fragment latin1_file "${profiles}/base/blocks/notes.md"
+    fixture_ref device-name write "${profiles}/base/files/docs/NUL.md" 'Device.'
+    fixture_ref trailing-dot write "${profiles}/base/files/docs." 'Dot.'
     fixture_ref unclosed-fence write "${profiles}/base/blocks/notes.md" '## Notes' '' '```markdown'
 }
 
@@ -456,6 +458,13 @@ expect_output "AGENTS.md: line 3 looks like a block marker but is not one"
 run_tool sync "${TARGET}"
 expect_status 2
 expect_no_file tool.sh
+write "${TARGET}/AGENTS.md" '<!-- BEGIN repo-baseline: foo --> trailing -->' 'Local text.' '<!-- END repo-baseline: foo --> trailing -->'
+run_tool check "${TARGET}"
+expect_status 1
+expect_output "AGENTS.md: line 1 looks like a block marker but is not one"
+run_tool sync "${TARGET}"
+expect_status 2
+expect_file AGENTS.md '<!-- BEGIN repo-baseline: foo --> trailing -->' 'Local text.' '<!-- END repo-baseline: foo --> trailing -->'
 
 test_case "check and sync: a symbolic link is never written through"
 new_target '["base"]'
@@ -687,6 +696,12 @@ expect_output "case-unselected: .github/Review.md and .github/review.md differ o
 run_tool check "${TARGET}" --ref latin1-fragment
 expect_status 2
 expect_output "latin1-fragment: fragment profiles/base/blocks/notes.md of block notes is not valid UTF-8."
+run_tool check "${TARGET}" --ref device-name
+expect_status 2
+expect_output "device-name: profiles/base/files/docs/NUL.md is not a valid target path"
+run_tool check "${TARGET}" --ref trailing-dot
+expect_status 2
+expect_output "trailing-dot: profiles/base/files/docs. is not a valid target path"
 run_tool check "${TARGET}" --ref unclosed-fence
 expect_status 2
 expect_output "unclosed-fence: line 3 of the base fragment of block notes for AGENTS.md opens a code fence that is never closed."
