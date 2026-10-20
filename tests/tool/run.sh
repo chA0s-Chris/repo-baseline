@@ -117,6 +117,7 @@ build_baseline() {
     fixture_ref latin1-fragment latin1_file "${profiles}/base/blocks/notes.md"
     fixture_ref device-name write "${profiles}/base/files/docs/NUL.md" 'Device.'
     fixture_ref trailing-dot write "${profiles}/base/files/docs." 'Dot.'
+    fixture_ref symlink-fragment symlink_file "${profiles}/base/blocks/notes.md" rules.md
     fixture_ref unclosed-fence write "${profiles}/base/blocks/notes.md" '## Notes' '' '```markdown'
 }
 
@@ -125,6 +126,12 @@ broken_profile() {
     write "$1/profile.json" '{' '  "blocks": [' \
         '    { "id": "notes", "file": "notes.txt", "source": "blocks/notes.txt", "position": "end" }' '  ]' '}'
     write "$1/blocks/notes.txt" 'Notes.'
+}
+
+# Replaces a file with a symbolic link to the given target.
+symlink_file() {
+    rm "$1"
+    ln -s "$2" "$1"
 }
 
 # Writes a file that is not valid UTF-8.
@@ -702,6 +709,9 @@ expect_output "device-name: profiles/base/files/docs/NUL.md is not a valid targe
 run_tool check "${TARGET}" --ref trailing-dot
 expect_status 2
 expect_output "trailing-dot: profiles/base/files/docs. is not a valid target path"
+run_tool check "${TARGET}" --ref symlink-fragment
+expect_status 2
+expect_output "symlink-fragment: profiles/base/blocks/notes.md has mode 120000; only regular files are supported."
 run_tool check "${TARGET}" --ref unclosed-fence
 expect_status 2
 expect_output "unclosed-fence: line 3 of the base fragment of block notes for AGENTS.md opens a code fence that is never closed."

@@ -485,7 +485,7 @@ internal sealed class ReleaseSource
             throw new ToolException($"{label}: {definitionPath} is missing.");
         }
 
-        var blocks = ParseDefinition(label, definitionPath, ReadBlob(checkout, definitionEntry))
+        var blocks = ParseDefinition(label, definitionPath, ReadRegularBlob(checkout, label, definitionPath, definitionEntry))
                      .Select(block => block with { Content = ReadFragment(checkout, label, directory, block, entries) })
                      .ToList();
 
@@ -522,7 +522,7 @@ internal sealed class ReleaseSource
             throw new ToolException($"{label}: fragment {path} of block {block.Id} is missing.");
         }
 
-        if (!TextFile.TryDecode(ReadBlob(checkout, entry), out var text))
+        if (!TextFile.TryDecode(ReadRegularBlob(checkout, label, path, entry), out var text))
         {
             throw new ToolException($"{label}: fragment {path} of block {block.Id} is not valid UTF-8.");
         }
@@ -595,6 +595,12 @@ internal sealed class ReleaseSource
         && path.Split('/').All(segment => (segment.Length > 0) && !segment.EndsWith('.') && !segment.EndsWith(' ') && !ReservedName.IsMatch(segment));
 
     private static Byte[] ReadBlob(String checkout, TreeEntry entry) => Git.Run(checkout, "cat-file", "blob", entry.Object);
+
+    // The blob of a symbolic link holds its target path, not the content it points to.
+    private static Byte[] ReadRegularBlob(String checkout, String label, String path, TreeEntry entry) =>
+        entry.Mode is "100644" or "100755"
+            ? ReadBlob(checkout, entry)
+            : throw new ToolException($"{label}: {path} has mode {entry.Mode}; only regular files are supported.");
 
     private sealed record TreeEntry(String Mode, String Object);
 }
