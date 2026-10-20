@@ -522,7 +522,12 @@ internal sealed class ReleaseSource
             throw new ToolException($"{label}: fragment {path} of block {block.Id} is missing.");
         }
 
-        return TextFile.EnsureFinalNewline(TextFile.Decode(ReadBlob(checkout, entry)));
+        if (!TextFile.TryDecode(ReadBlob(checkout, entry), out var text))
+        {
+            throw new ToolException($"{label}: fragment {path} of block {block.Id} is not valid UTF-8.");
+        }
+
+        return TextFile.EnsureFinalNewline(text);
     }
 
     private static List<BlockDefinition> ParseDefinition(String label, String path, Byte[] content)
@@ -737,7 +742,7 @@ internal sealed class ExpectedContent
             files[file.Path] = file;
         }
 
-        RejectCollidingPaths(source.Label, selected, files.Keys);
+        RejectCollidingPaths(source.Label, source.Profiles.Values, files.Keys);
 
         // Every block target file of the release is scanned, so blocks of a removed profile are found.
         var others = source.Profiles.Values.Where(profile => !profileNames.Contains(profile.Name));
@@ -761,12 +766,13 @@ internal sealed class ExpectedContent
 
     /// <summary>
     /// The manifest belongs to the target repository, and a target path cannot be a file and a directory at once. Paths are
-    /// compared ignoring case, because the file systems of Windows and usually macOS would let them alias.
+    /// compared ignoring case, because the file systems of Windows and usually macOS would let them alias. The selected whole
+    /// files are checked together with the block targets of every profile, because all block targets are scanned.
     /// </summary>
-    private static void RejectCollidingPaths(String label, IEnumerable<Profile> selected, IEnumerable<String> files)
+    private static void RejectCollidingPaths(String label, IEnumerable<Profile> profiles, IEnumerable<String> selectedFiles)
     {
         var paths = new Dictionary<String, String>(StringComparer.OrdinalIgnoreCase);
-        foreach (var path in files.Concat(selected.SelectMany(profile => profile.Blocks).Select(block => block.File)).Distinct(StringComparer.Ordinal))
+        foreach (var path in selectedFiles.Concat(profiles.SelectMany(profile => profile.Blocks).Select(block => block.File)).Distinct(StringComparer.Ordinal))
         {
             if (!paths.TryAdd(path, path))
             {

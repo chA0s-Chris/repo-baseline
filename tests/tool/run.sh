@@ -113,6 +113,8 @@ build_baseline() {
         "${profiles}/base/profile.json"
     fixture_ref case-collision write "${profiles}/extra/files/TOOL.sh" 'Echo.'
     fixture_ref case-parent write "${profiles}/extra/files/Docs" 'A file where base needs a directory.'
+    fixture_ref case-unselected write "${profiles}/base/files/.github/Review.md" 'Review.'
+    fixture_ref latin1-fragment latin1_file "${profiles}/base/blocks/notes.md"
     fixture_ref unclosed-fence write "${profiles}/base/blocks/notes.md" '## Notes' '' '```markdown'
 }
 
@@ -121,6 +123,11 @@ broken_profile() {
     write "$1/profile.json" '{' '  "blocks": [' \
         '    { "id": "notes", "file": "notes.txt", "source": "blocks/notes.txt", "position": "end" }' '  ]' '}'
     write "$1/blocks/notes.txt" 'Notes.'
+}
+
+# Writes a file that is not valid UTF-8.
+latin1_file() {
+    printf 'Notes \xE4.\n' > "$1"
 }
 
 # Creates a ref from main whose only commit runs the given command in the fixture repository.
@@ -674,6 +681,12 @@ expect_output "case-collision: tool.sh and TOOL.sh differ only in case."
 run_tool check "${TARGET}" --ref case-parent
 expect_status 2
 expect_output "case-parent: Docs is a file, but docs/GUIDE.md needs it to be a directory."
+run_tool check "${TARGET}" --ref case-unselected
+expect_status 2
+expect_output "case-unselected: .github/Review.md and .github/review.md differ only in case."
+run_tool check "${TARGET}" --ref latin1-fragment
+expect_status 2
+expect_output "latin1-fragment: fragment profiles/base/blocks/notes.md of block notes is not valid UTF-8."
 run_tool check "${TARGET}" --ref unclosed-fence
 expect_status 2
 expect_output "unclosed-fence: line 3 of the base fragment of block notes for AGENTS.md opens a code fence that is never closed."
