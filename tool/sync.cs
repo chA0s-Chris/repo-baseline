@@ -422,7 +422,7 @@ internal sealed record Profile(String Name, IReadOnlyList<BlockDefinition> Block
 internal sealed class ReleaseSource
 {
     private const String ProfilesDirectory = "profiles/";
-    private static readonly Regex ReservedName = new(@"^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(\..*)?$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+    private static readonly Regex ReservedName = new(@"^(CON|PRN|AUX|NUL|COM[1-9¹²³]|LPT[1-9¹²³])(\..*)?$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
 
     private ReleaseSource(String label, IReadOnlyDictionary<String, Profile> profiles)
     {
