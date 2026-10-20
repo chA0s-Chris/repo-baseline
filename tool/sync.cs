@@ -589,10 +589,12 @@ internal sealed class ReleaseSource
     }
 
     // A colon would make a Windows drive path (`C:/…`) or an NTFS stream, which `Path.Combine` resolves outside the target.
-    // Device names such as `NUL` and names ending in a dot or space do not address a regular file on Windows.
+    // Device names such as `NUL`, names ending in a dot or space, and the characters Windows forbids in file names do not
+    // address a regular file on Windows.
     private static Boolean IsRelativePath(String path) =>
         !path.StartsWith('/') && !path.Contains('\\') && !path.Contains(':')
-        && path.Split('/').All(segment => (segment.Length > 0) && !segment.EndsWith('.') && !segment.EndsWith(' ') && !ReservedName.IsMatch(segment));
+        && path.Split('/').All(segment => (segment.Length > 0) && !segment.EndsWith('.') && !segment.EndsWith(' ') && !ReservedName.IsMatch(segment)
+                                          && !segment.Any(character => Char.IsControl(character) || "<>\"|?*".Contains(character)));
 
     private static Byte[] ReadBlob(String checkout, TreeEntry entry) => Git.Run(checkout, "cat-file", "blob", entry.Object);
 
@@ -639,8 +641,8 @@ internal sealed record MarkerSyntax(String Prefix, String Suffix, Boolean Fenced
             return null;
         }
 
-        // Anything else, such as `foo --> trailing`, is a near miss, so the file counts as malformed.
-        var id = text[start.Length..^Suffix.Length].Trim();
+        // Anything else, such as `foo --> trailing` or an ID with extra spaces around it, is a near miss, so the file counts as malformed.
+        var id = text[start.Length..^Suffix.Length];
         return BlockIds.IsValid(id) ? id : null;
     }
 

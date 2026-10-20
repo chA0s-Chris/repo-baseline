@@ -118,6 +118,7 @@ build_baseline() {
     fixture_ref device-name write "${profiles}/base/files/docs/NUL.md" 'Device.'
     fixture_ref trailing-dot write "${profiles}/base/files/docs." 'Dot.'
     fixture_ref symlink-fragment symlink_file "${profiles}/base/blocks/notes.md" rules.md
+    fixture_ref forbidden-character write "${profiles}/base/files/docs/a?.md" 'Question.'
     fixture_ref unclosed-fence write "${profiles}/base/blocks/notes.md" '## Notes' '' '```markdown'
 }
 
@@ -465,6 +466,11 @@ expect_output "AGENTS.md: line 3 looks like a block marker but is not one"
 run_tool sync "${TARGET}"
 expect_status 2
 expect_no_file tool.sh
+write "${TARGET}/AGENTS.md" '<!-- BEGIN repo-baseline:  rules -->' 'Rules.' '<!-- END repo-baseline: rules  -->'
+run_tool check "${TARGET}"
+expect_status 1
+expect_output "AGENTS.md: line 1 looks like a block marker but is not one"
+expect_output "AGENTS.md: line 3 looks like a block marker but is not one"
 write "${TARGET}/AGENTS.md" '<!-- BEGIN repo-baseline: foo --> trailing -->' 'Local text.' '<!-- END repo-baseline: foo --> trailing -->'
 run_tool check "${TARGET}"
 expect_status 1
@@ -712,6 +718,9 @@ expect_output "trailing-dot: profiles/base/files/docs. is not a valid target pat
 run_tool check "${TARGET}" --ref symlink-fragment
 expect_status 2
 expect_output "symlink-fragment: profiles/base/blocks/notes.md has mode 120000; only regular files are supported."
+run_tool check "${TARGET}" --ref forbidden-character
+expect_status 2
+expect_output "forbidden-character: profiles/base/files/docs/a?.md is not a valid target path"
 run_tool check "${TARGET}" --ref unclosed-fence
 expect_status 2
 expect_output "unclosed-fence: line 3 of the base fragment of block notes for AGENTS.md opens a code fence that is never closed."
