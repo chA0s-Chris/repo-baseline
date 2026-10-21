@@ -2,9 +2,10 @@
 # Tests for tool/sync.cs.
 #
 # The tests build a fixture repo-baseline repository under tmp/ with a copy of tool/sync.cs and fixture
-# profiles, tag releases in it, and run the tool from there against throwaway target repositories. The
-# fixture profiles are independent of the real ones, so profile changes do not break the tests. The tests
-# need bash, Git and the .NET 10 SDK or later.
+# profiles, tag releases in it, and run the tool from there against throwaway target repositories. A second
+# fixture repository has profiles with templates under the names that `init` selects. The fixture profiles
+# are independent of the real ones, so profile changes do not break the tests. The tests need bash, Git and
+# the .NET 10 SDK or later.
 set -euo pipefail
 
 # Throwaway repositories must not depend on the user's or system's Git configuration,
@@ -908,6 +909,352 @@ expect_status 0
 expect_file docs/GUIDE.md 'Guide v2.'
 run_tool_from "${WORK}/shallow" check "${TARGET}"
 expect_status 0
+
+# The init fixture uses the profile names that init selects: common, dotnet, dotnet-nuget, github and gitlab.
+#   common        a whole file, two blocks, and templates for AGENTS.md, .gitignore, README.md and LICENSE
+#   dotnet        shared ReSharper settings and test packages, a block, and templates that replace AGENTS.md and
+#                 use every placeholder, including {{Name}} in file names
+#   dotnet-nuget  a synced .props file and a template that replaces src/Directory.Build.props
+#   github        a block in a file without a template
+#   gitlab        nothing
+INIT_BASELINE="${WORK}/init-baseline"
+XMLNS='xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:s="clr-namespace:System;assembly=mscorlib" xmlns:wpf="http://schemas.microsoft.com/winfx/2006/xaml/presentation"'
+LAYER='/Default/Environment/InjectedLayers/FileInjectedLayer/={{LayerGuid}}'
+YEAR="$(date +%Y)"
+NOTICE='\nThis file is licensed under the MIT license. See LICENSE in the project root for more information.'
+
+build_init_baseline() {
+    mkdir -p "${INIT_BASELINE}/tool"
+    git -C "${INIT_BASELINE}" init --quiet --initial-branch=main
+    git -C "${INIT_BASELINE}" config user.email test@example.invalid
+    git -C "${INIT_BASELINE}" config user.name test
+    cp "${ROOT}/tool/sync.cs" "${INIT_BASELINE}/tool/sync.cs"
+
+    local profiles="${INIT_BASELINE}/profiles"
+    write "${profiles}/common/profile.json" '{' '  "blocks": [' \
+        '    { "id": "gitignore", "file": ".gitignore", "source": "blocks/gitignore.gitignore", "position": "start" },' \
+        '    { "id": "rules", "file": "AGENTS.md", "source": "blocks/rules.md", "position": "end" }' \
+        '  ]' '}'
+    write "${profiles}/common/blocks/gitignore.gitignore" '/tmp/'
+    write "${profiles}/common/blocks/rules.md" '## Rules'
+    write "${profiles}/common/files/CLAUDE.md" 'Read AGENTS.md.'
+    write "${profiles}/common/templates/AGENTS.md" '# {{Name}}' '' '<!-- BEGIN repo-baseline: rules -->' '<!-- END repo-baseline: rules -->'
+    write "${profiles}/common/templates/.gitignore" '# BEGIN repo-baseline: gitignore' '# END repo-baseline: gitignore' '' '.idea/'
+    write "${profiles}/common/templates/README.md" '# {{Name}}' '' 'Source: {{RepositoryUrl}}'
+    write "${profiles}/common/templates/LICENSE" 'Copyright (c) {{Year}} Holder'
+
+    write "${profiles}/dotnet/profile.json" '{' '  "blocks": [' \
+        '    { "id": "code-style", "file": "AGENTS.md", "source": "blocks/code-style.md", "position": "end" }' \
+        '  ]' '}'
+    write "${profiles}/dotnet/blocks/code-style.md" '## Code style'
+    write "${profiles}/dotnet/files/.repo-baseline/ReSharper.DotSettings" \
+        "<wpf:ResourceDictionary xml:space=\"preserve\" ${XMLNS}>" \
+        '  <s:Boolean x:Key="/Default/Shared/A/@EntryValue">True</s:Boolean>' \
+        '</wpf:ResourceDictionary>'
+    write "${profiles}/dotnet/files/.repo-baseline/Tests.props" \
+        '<Project>' '  <ItemGroup>' '    <PackageReference Include="NUnit" />' '  </ItemGroup>' '</Project>'
+    write "${profiles}/dotnet/files/cleanup.sh" '#!/bin/bash' 'echo cleanup'
+    chmod +x "${profiles}/dotnet/files/cleanup.sh"
+    write "${profiles}/dotnet/templates/AGENTS.md" '# {{Name}}' '' 'Run `dotnet test {{Name}}.slnx`.' '' \
+        '<!-- BEGIN repo-baseline: rules -->' '<!-- END repo-baseline: rules -->' '' \
+        '<!-- BEGIN repo-baseline: code-style -->' '<!-- END repo-baseline: code-style -->'
+    write "${profiles}/dotnet/templates/.editorconfig" '[*.cs]' 'file_header_template = Copyright (c) {{Year}} Holder.{{LicenseNotice}}'
+    write "${profiles}/dotnet/templates/{{Name}}.slnx" '<Solution>' '</Solution>'
+    write "${profiles}/dotnet/templates/{{Name}}.slnx.DotSettings" "<wpf:ResourceDictionary xml:space=\"preserve\" ${XMLNS}>" \
+        "  <s:Boolean x:Key=\"${LAYER}/@KeyIndexDefined\">True</s:Boolean>" \
+        "  <s:String x:Key=\"${LAYER}/RelativePath/@EntryValue\">..\\.repo-baseline\\ReSharper.DotSettings</s:String>" \
+        '</wpf:ResourceDictionary>'
+    write "${profiles}/dotnet/templates/Directory.Build.props" '<Project>' '  <PropertyGroup>' '    {{TargetFrameworkProperties}}' \
+        '  </PropertyGroup>' '</Project>'
+    write "${profiles}/dotnet/templates/Directory.Packages.props" '<Project>' '  <ItemGroup>' \
+        '    <PackageVersion Include="NUnit" Version="4.0.0" />' '  </ItemGroup>' '</Project>'
+    write "${profiles}/dotnet/templates/src/Directory.Build.props" '<Project>' '  <PropertyGroup>' '    <Packable>false</Packable>' \
+        '  </PropertyGroup>' '  {{SourceLinkGitLabHost}}' '</Project>'
+
+    write "${profiles}/dotnet-nuget/profile.json" '{ "blocks": [] }'
+    write "${profiles}/dotnet-nuget/files/.repo-baseline/Packaging.props" '<Project />'
+    write "${profiles}/dotnet-nuget/templates/src/Directory.Build.props" '<Project>' '  <PropertyGroup>' '    <Packable>true</Packable>' \
+        '    <PackageProjectUrl>{{RepositoryUrl}}</PackageProjectUrl>' '  </PropertyGroup>' '  {{SourceLinkGitLabHost}}' '</Project>'
+
+    write "${profiles}/github/profile.json" '{' '  "blocks": [' \
+        '    { "id": "review", "file": ".github/review.md", "source": "blocks/review.md", "position": "start" }' \
+        '  ]' '}'
+    write "${profiles}/github/blocks/review.md" 'Review rules.'
+    write "${profiles}/gitlab/profile.json" '{ "blocks": [] }'
+
+    commit "${INIT_BASELINE}" v1.0.0
+    git -C "${INIT_BASELINE}" tag v1.0.0
+
+    init_fixture_ref unknown-placeholder write "${profiles}/common/templates/README.md" '# {{Title}}'
+    init_fixture_ref stray-braces write "${profiles}/common/templates/README.md" '# {{ Name }}'
+    init_fixture_ref path-placeholder write "${profiles}/common/templates/{{Year}}.md" 'Year.'
+    init_fixture_ref latin1-template latin1_file "${profiles}/common/templates/README.md"
+    init_fixture_ref template-synced write "${profiles}/dotnet/templates/CLAUDE.md" 'Template.'
+    init_fixture_ref template-manifest write "${profiles}/common/templates/.repo-baseline.json" '{}'
+    init_fixture_ref template-key write "${profiles}/dotnet-nuget/templates/{{Name}}.snk" 'Key.'
+    init_fixture_ref template-case write "${profiles}/dotnet/templates/readme.md" 'Readme.'
+    init_fixture_ref template-markers write "${profiles}/common/templates/.gitignore" '# BEGIN repo-baseline: gitignore' '.idea/'
+    init_fixture_ref template-invalid-path write "${profiles}/dotnet/templates/docs." 'Dot.'
+}
+
+# Creates a ref from main of the init fixture whose only commit runs the given command.
+init_fixture_ref() {
+    local name="$1"
+    shift
+    git -C "${INIT_BASELINE}" switch --quiet -c "${name}" main
+    "$@"
+    commit "${INIT_BASELINE}" "${name}"
+    git -C "${INIT_BASELINE}" switch --quiet main
+}
+
+# Creates an empty target repository without a manifest; the optional argument tells several apart within one test.
+new_empty_target() {
+    TARGET="${WORK}/target-${TESTS}${1:-}"
+    mkdir -p "${TARGET}"
+    git -C "${TARGET}" init --quiet
+}
+
+# Runs init from the init fixture with the given version and options.
+run_init() {
+    run_tool_from "${INIT_BASELINE}" init "${TARGET}" "$@"
+}
+
+LIBRARY_ON_GITHUB=(--name Sample --type library --forge github --repository-url https://github.com/example/Sample --target-frameworks 'net10.0;net8.0;net9.0')
+
+# Lists the files of the target without .git, one per line, sorted.
+target_files() {
+    (cd "${TARGET}" && find . -path ./.git -prune -o -type f -print | LC_ALL=C sort)
+}
+
+expect_files() {
+    local expected
+    expected="$(printf '%s\n' "$@" | LC_ALL=C sort)"
+    if [ "$(target_files)" != "${expected}" ]; then
+        OUTPUT=$(diff <(echo "${expected}") <(target_files) || true)
+        fail "unexpected list of files"
+    fi
+}
+
+build_init_baseline
+
+test_case "init: sets up a library on GitHub from templates, synced files and blocks"
+new_empty_target
+run_init 1.0.0 "${LIBRARY_ON_GITHUB[@]}"
+expect_status 0
+expect_output "Initialized ${TARGET} with v1.0.0, profiles common, dotnet, dotnet-nuget, github:"
+expect_output "Sample.snk: created; the strong-name key, never commit it"
+expect_no_output "Skipped"
+expect_file .repo-baseline.json '{' '  "version": "1.0.0",' '  "profiles": ["common", "dotnet", "dotnet-nuget", "github"],' \
+    '  "inspection": {' '    "suppressedIds": []' '  }' '}'
+expect_file AGENTS.md '# Sample' '' 'Run `dotnet test Sample.slnx`.' '' \
+    '<!-- BEGIN repo-baseline: rules -->' '## Rules' '<!-- END repo-baseline: rules -->' '' \
+    '<!-- BEGIN repo-baseline: code-style -->' '## Code style' '<!-- END repo-baseline: code-style -->'
+expect_file .gitignore '# BEGIN repo-baseline: gitignore' '/tmp/' '# END repo-baseline: gitignore' '' '.idea/' 'Sample.snk'
+expect_file README.md '# Sample' '' 'Source: https://github.com/example/Sample'
+expect_file LICENSE "Copyright (c) ${YEAR} Holder"
+expect_file .editorconfig '[*.cs]' "file_header_template = Copyright (c) ${YEAR} Holder.${NOTICE}"
+expect_file Sample.slnx '<Solution>' '</Solution>'
+expect_file Directory.Build.props '<Project>' '  <PropertyGroup>' '    <LatestTarget>net10.0</LatestTarget>' \
+    '    <MainTargets>$(LatestTarget);net9.0;net8.0</MainTargets>' '    <TargetFrameworks>$(MainTargets)</TargetFrameworks>' \
+    '  </PropertyGroup>' '</Project>'
+expect_file src/Directory.Build.props '<Project>' '  <PropertyGroup>' '    <Packable>true</Packable>' \
+    '    <PackageProjectUrl>https://github.com/example/Sample</PackageProjectUrl>' '  </PropertyGroup>' '</Project>'
+expect_file .github/review.md '<!-- BEGIN repo-baseline: review -->' 'Review rules.' '<!-- END repo-baseline: review -->'
+expect_executable cleanup.sh
+guids="$(grep -oE 'FileInjectedLayer/=[0-9A-F]{32}/' "${TARGET}/Sample.slnx.DotSettings" | sort -u | wc -l)"
+[ "$(grep -c 'FileInjectedLayer/=[0-9A-F]\{32\}/' "${TARGET}/Sample.slnx.DotSettings")" -eq 2 ] && [ "${guids}" -eq 1 ] \
+    || fail "expected one layer GUID of 32 uppercase hexadecimal digits in both injection entries"
+[ "$(stat -c %s "${TARGET}/Sample.snk")" -eq 596 ] || fail "expected a 596-byte strong-name key"
+[ "$(stat -c %a "${TARGET}/Sample.snk")" = 600 ] || fail "expected the key to be readable and writable only by its owner"
+[ "$(head -c 1 "${TARGET}/Sample.snk" | od -An -tx1 | tr -d ' ')" = 07 ] || fail "expected a private key blob"
+git -C "${TARGET}" check-ignore --quiet Sample.snk || fail "expected Git to ignore Sample.snk"
+expect_no_output "RSA2"
+run_tool_from "${INIT_BASELINE}" check "${TARGET}"
+expect_status 0
+KEY_TARGET="${TARGET}"
+
+test_case "init: the strong-name key signs an assembly"
+write "${WORK}/signing/Signed.csproj" '<Project Sdk="Microsoft.NET.Sdk">' '  <PropertyGroup>' '    <OutputType>Exe</OutputType>' \
+    '    <TargetFramework>net10.0</TargetFramework>' '    <RollForward>Major</RollForward>' '    <SignAssembly>true</SignAssembly>' \
+    "    <AssemblyOriginatorKeyFile>${KEY_TARGET}/Sample.snk</AssemblyOriginatorKeyFile>" '  </PropertyGroup>' '</Project>'
+write "${WORK}/signing/Program.cs" 'System.Console.WriteLine($"token={System.Convert.ToHexString(typeof(Program).Assembly.GetName().GetPublicKeyToken() ?? [])}");'
+set +e
+OUTPUT=$(cd "${WORK}/signing" && dotnet run 2>&1)
+STATUS=$?
+set -e
+expect_status 0
+grep -qE '^token=[0-9A-F]{16}$' <<< "${OUTPUT}" || fail "expected a signed assembly with a public key token"
+
+test_case "init: an application on a self-hosted GitLab with one target framework"
+new_empty_target
+run_init 1.0.0 --name Sample --type application --forge gitlab --repository-url https://gitlab.example.com:8443/group/Sample --target-frameworks net10.0
+expect_status 0
+expect_file .repo-baseline.json '{' '  "version": "1.0.0",' '  "profiles": ["common", "dotnet", "gitlab"],' \
+    '  "inspection": {' '    "suppressedIds": []' '  }' '}'
+expect_file Directory.Build.props '<Project>' '  <PropertyGroup>' '    <TargetFramework>net10.0</TargetFramework>' '  </PropertyGroup>' '</Project>'
+expect_file src/Directory.Build.props '<Project>' '  <PropertyGroup>' '    <Packable>false</Packable>' '  </PropertyGroup>' \
+    '  <ItemGroup>' '    <SourceLinkGitLabHost Include="gitlab.example.com:8443" />' '  </ItemGroup>' '</Project>'
+expect_file .gitignore '# BEGIN repo-baseline: gitignore' '/tmp/' '# END repo-baseline: gitignore' '' '.idea/'
+expect_no_file Sample.snk
+expect_no_file .github/review.md
+run_tool_from "${INIT_BASELINE}" check "${TARGET}"
+expect_status 0
+
+test_case "init: all four combinations of type and forge produce their files and pass check"
+for type in application library; do
+    for forge in github gitlab; do
+        new_empty_target "-${type}-${forge}"
+        url="https://${forge}.com/example/Sample"
+        run_init 1.0.0 --name Sample --type "${type}" --forge "${forge}" --repository-url "${url}" --target-frameworks net10.0
+        expect_status 0
+        files=(./.editorconfig ./.gitignore ./.repo-baseline.json ./.repo-baseline/ReSharper.DotSettings ./.repo-baseline/Tests.props ./AGENTS.md
+            ./CLAUDE.md ./Directory.Build.props ./Directory.Packages.props ./LICENSE ./README.md ./Sample.slnx ./Sample.slnx.DotSettings
+            ./cleanup.sh ./src/Directory.Build.props)
+        [ "${type}" = library ] && files+=(./.repo-baseline/Packaging.props ./Sample.snk)
+        [ "${forge}" = github ] && files+=(./.github/review.md)
+        expect_files "${files[@]}"
+        grep -q SourceLinkGitLabHost "${TARGET}/src/Directory.Build.props" && fail "expected no SourceLinkGitLabHost for ${forge}.com"
+        run_tool_from "${INIT_BASELINE}" check "${TARGET}"
+        expect_status 0
+    done
+done
+
+test_case "init: --private leaves out the LICENSE and the license notice"
+new_empty_target
+run_init 1.0.0 "${LIBRARY_ON_GITHUB[@]}" --private
+expect_status 0
+expect_no_file LICENSE
+expect_file .editorconfig '[*.cs]' "file_header_template = Copyright (c) ${YEAR} Holder."
+run_tool_from "${INIT_BASELINE}" check "${TARGET}"
+expect_status 0
+
+test_case "init: skips and lists existing files; --force overwrites them, except the key"
+new_empty_target
+write "${TARGET}/README.md" 'Local readme.'
+write "${TARGET}/CLAUDE.md" 'Local claude.'
+write "${TARGET}/AGENTS.md" '# Local'
+write "${TARGET}/.github/review.md" 'Local review.'
+run_init 1.0.0 "${LIBRARY_ON_GITHUB[@]}"
+expect_status 0
+expect_output "Skipped existing files; --force overwrites them, except a strong-name key:"
+for skipped in README.md CLAUDE.md AGENTS.md .github/review.md; do
+    grep -qx "  ${skipped}" <<< "${OUTPUT}" || fail "expected ${skipped} in the list of skipped files"
+done
+expect_output "Run sync to update the synced content and blocks of skipped files."
+expect_file README.md 'Local readme.'
+expect_file CLAUDE.md 'Local claude.'
+expect_file AGENTS.md '# Local'
+expect_file .github/review.md 'Local review.'
+run_init 1.0.0 "${LIBRARY_ON_GITHUB[@]}"
+expect_status 2
+expect_output "already has .repo-baseline.json. Use sync to update its synced content, or init --force to overwrite its files."
+cp "${TARGET}/Sample.snk" "${WORK}/key-before"
+run_init 1.0.0 "${LIBRARY_ON_GITHUB[@]}" --force
+expect_status 0
+expect_output ".repo-baseline.json: overwritten"
+expect_output ".github/review.md: blocks merged"
+expect_output "Sample.snk: an existing strong-name key is never replaced"
+expect_file README.md '# Sample' '' 'Source: https://github.com/example/Sample'
+expect_file CLAUDE.md 'Read AGENTS.md.'
+expect_file .github/review.md '<!-- BEGIN repo-baseline: review -->' 'Review rules.' '<!-- END repo-baseline: review -->' '' 'Local review.'
+cmp -s "${WORK}/key-before" "${TARGET}/Sample.snk" || fail "expected --force to keep the existing key"
+run_tool_from "${INIT_BASELINE}" check "${TARGET}"
+expect_status 0
+
+test_case "init: adds the key to an existing .gitignore once"
+new_empty_target
+printf 'bin/' > "${TARGET}/.gitignore"
+run_init 1.0.0 "${LIBRARY_ON_GITHUB[@]}"
+expect_status 0
+expect_output ".gitignore: kept, Sample.snk added"
+grep -qx "  .gitignore" <<< "${OUTPUT}" && fail "expected .gitignore not to be listed as skipped"
+expect_file .gitignore 'bin/' 'Sample.snk'
+git -C "${TARGET}" check-ignore --quiet Sample.snk || fail "expected Git to ignore Sample.snk"
+new_empty_target -listed
+write "${TARGET}/.gitignore" 'Sample.snk'
+run_init 1.0.0 "${LIBRARY_ON_GITHUB[@]}"
+expect_status 0
+grep -qx "  .gitignore" <<< "${OUTPUT}" || fail "expected .gitignore in the list of skipped files"
+expect_file .gitignore 'Sample.snk'
+
+test_case "init: a path problem writes nothing"
+new_empty_target
+ln -s "${WORK}/elsewhere.md" "${TARGET}/README.md"
+mkdir -p "${TARGET}/Directory.Build.props"
+run_init 1.0.0 "${LIBRARY_ON_GITHUB[@]}"
+expect_status 2
+expect_output "error: README.md: is a symbolic link; synced files must be regular files inside the repository"
+expect_output "error: Directory.Build.props: is a directory"
+expect_output "error: init wrote nothing because of the problems above."
+expect_no_file .repo-baseline.json
+expect_no_file AGENTS.md
+expect_no_file Sample.snk
+
+test_case "init: invalid templates are source errors, and nothing is written"
+new_empty_target
+for case in \
+    "unknown-placeholder|template common/templates/README.md: line 1: unknown placeholder {{Title}}." \
+    "stray-braces|template common/templates/README.md: line 1: '{{' does not start a placeholder." \
+    "path-placeholder|template common/templates/{{Year}}.md: {{Year}} is not allowed in a path; only {{Name}} is." \
+    "latin1-template|template common/templates/README.md is not valid UTF-8." \
+    "template-synced|template dotnet/templates/CLAUDE.md has the target path of a synced file of profile common." \
+    "template-manifest|template common/templates/.repo-baseline.json has the target path of .repo-baseline.json, which init writes itself." \
+    "template-key|template dotnet-nuget/templates/{{Name}}.snk has the target path of the strong-name key." \
+    "template-case|README.md and readme.md differ only in case or Unicode normalization." \
+    "template-markers|template common/templates/.gitignore: block gitignore: BEGIN marker on line 1 has no END marker" \
+    "template-invalid-path|template dotnet/templates/docs. is not a valid target path as docs."; do
+    run_init 1.0.0 "${LIBRARY_ON_GITHUB[@]}" --ref "${case%%|*}"
+    expect_status 2
+    expect_output "error: ${case%%|*}: ${case#*|}"
+done
+expect_files
+
+test_case "init: --ref reads another ref and still records the version"
+new_empty_target
+run_init 3.0.0 "${LIBRARY_ON_GITHUB[@]}" --ref main
+expect_status 0
+expect_output "with main, profiles"
+grep -q '"version": "3.0.0",' "${TARGET}/.repo-baseline.json" || fail "expected version 3.0.0 in the manifest"
+run_tool_from "${INIT_BASELINE}" check "${TARGET}" --ref main
+expect_status 0
+run_tool_from "${INIT_BASELINE}" check "${TARGET}"
+expect_status 2
+expect_output "tag v3.0.0 not found"
+
+test_case "errors: init inputs are validated"
+new_empty_target
+url=https://github.com/example/Sample
+for case in \
+    "init needs the version to record in the manifest.|--name Sample --type library --forge github --repository-url ${url} --target-frameworks net10.0" \
+    "init needs --name, --type, --forge, --repository-url, --target-frameworks.|1.0.0" \
+    "'1Sample' is not a valid name; use dot-separated C# identifiers such as Chaos.Example.|1.0.0 --name 1Sample --type library --forge github --repository-url ${url} --target-frameworks net10.0" \
+    "'Sample.' is not a valid name|1.0.0 --name Sample. --type library --forge github --repository-url ${url} --target-frameworks net10.0" \
+    "'tool' is not a valid --type; use application or library.|1.0.0 --name Sample --type tool --forge github --repository-url ${url} --target-frameworks net10.0" \
+    "'bitbucket' is not a valid --forge; use github or gitlab.|1.0.0 --name Sample --type library --forge bitbucket --repository-url ${url} --target-frameworks net10.0" \
+    "'http://github.com/example/Sample' is not a valid --repository-url|1.0.0 --name Sample --type library --forge github --repository-url http://github.com/example/Sample --target-frameworks net10.0" \
+    "'https://user:secret@github.com/example/Sample' is not a valid --repository-url|1.0.0 --name Sample --type library --forge github --repository-url https://user:secret@github.com/example/Sample --target-frameworks net10.0" \
+    "'https://github.com/example/Sample?tab=1' is not a valid --repository-url|1.0.0 --name Sample --type library --forge github --repository-url https://github.com/example/Sample?tab=1 --target-frameworks net10.0" \
+    "--forge github needs a repository URL on github.com, not gitlab.com.|1.0.0 --name Sample --type library --forge github --repository-url https://gitlab.com/example/Sample --target-frameworks net10.0" \
+    "--forge gitlab needs a repository URL on a GitLab host, not github.com.|1.0.0 --name Sample --type library --forge gitlab --repository-url ${url} --target-frameworks net10.0" \
+    "'net10' is not a valid target framework|1.0.0 --name Sample --type library --forge github --repository-url ${url} --target-frameworks net10" \
+    "'' is not a valid target framework|1.0.0 --name Sample --type library --forge github --repository-url ${url} --target-frameworks net10.0;" \
+    "--target-frameworks lists a framework more than once.|1.0.0 --name Sample --type library --forge github --repository-url ${url} --target-frameworks net10.0;net10.0" \
+    "--name is given more than once.|1.0.0 --name Sample --name Other --type library --forge github --repository-url ${url} --target-frameworks net10.0" \
+    "--force is given more than once.|1.0.0 --force --force" \
+    "--type needs a value.|1.0.0 --type" \
+    "Unexpected argument 'extra'.|1.0.0 extra --name Sample --type library --forge github --repository-url ${url} --target-frameworks net10.0"; do
+    # shellcheck disable=SC2086 # The arguments are split on purpose.
+    run_init ${case#*|}
+    expect_status 2
+    expect_output "error: ${case%%|*}"
+done
+run_tool_from "${INIT_BASELINE}" sync "${TARGET}" --private
+expect_status 2
+expect_output "Unknown option '--private'."
+run_tool_from "${INIT_BASELINE}" check "${TARGET}" --name Sample
+expect_status 2
+expect_output "Unknown option '--name'."
+expect_files
 
 echo
 if [ "${FAILURES}" -eq 0 ]; then

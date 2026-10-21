@@ -44,9 +44,12 @@ profiles/<profile>/
   profile.json            block definitions
   files/<target path>     whole files, written as they are
   blocks/<fragment>       block fragments
+  templates/<target path> created-once templates, filled in by `init`
 ```
 
 Whole files keep their file mode: `sync` sets the executable bit for files that have it in the profile, and `check` reports a synced file whose executable bit differs.
+
+Templates are read only by `init`; `sync` and `check` ignore them. When several selected profiles have a template for the same target path, the one later in manifest profile order replaces the earlier one, so a profile such as `dotnet-nuget` can provide a variant of a `dotnet` template. Templates have no conditionals. A template must not have the target path of a synced whole file or of the manifest. Templates of block target files contain the block markers in the intended order, and `init` fills the blocks.
 
 `profile.json` lists the blocks the profile contributes to:
 
@@ -193,13 +196,33 @@ The tool is a single-file C# app (`tool/sync.cs`, run with `dotnet run`) with th
 
 | Command | Effect |
 |---|---|
-| `init` | Creates the manifest, writes synced content, copies the created-once templates with names filled in, creates the ReSharper layer injection, and generates a strong-name key for `dotnet-nuget` repositories. Refuses to overwrite existing files unless asked to. |
+| `init` | Creates the manifest, writes synced content, copies the created-once templates with their placeholders filled in, which creates the ReSharper layer injection, and generates a strong-name key for `dotnet-nuget` repositories. Skips existing files and lists them; `--force` overwrites them, except an existing strong-name key. |
 | `sync` | Updates synced content to the version in the manifest, or to a version given on the command line, which is then recorded in the manifest. Removes blocks that no selected profile defines. Writes nothing if a block target file has malformed block markers, if a file the selected profiles use is not valid UTF-8, or if such a file has a symbolic link, a directory or a file in its path where the tool needs a regular file. |
 | `check` | Exits non-zero if synced content differs from the pinned release, if a managed block is missing, unknown or malformed, if a synced file is not a regular file inside the repository or a managed file is not valid UTF-8, if the local ReSharper file does not inject the shared layer or redefines shared keys, or if a package from a synced `.props` file has no version. |
 
-`sync` and `check` exist; `init` follows. Both exit with `0` on success, `1` when `check` has findings, and `2` on usage, manifest and source errors and when `sync` refuses to write. The README shows how to run them.
+All three commands exit with `0` on success, `1` when `check` has findings, and `2` on usage, manifest and source errors and when `init` or `sync` refuses to write. The README shows how to run them.
 
-Templates for created-once files may contain placeholders (solution name, package ID, repository URL); `init` fills them once. This does not contradict rule 1, because the repository owns these files from then on.
+### `init`
+
+`init` takes the version to record in the manifest and the inputs from the layout guide: the name, the project type, the forge with the repository URL, and the target frameworks. It derives the profiles from the project type and the forge: `common`, `dotnet`, `dotnet-nuget` for published libraries, then `github` or `gitlab`. `--private` leaves out the `LICENSE`. `--ref` reads the content of another ref, as for `sync`, but `init` still records the given version, so a repository can be set up before its release is tagged.
+
+Templates for created-once files may contain placeholders; `init` fills them once. This does not contradict rule 1, because the repository owns these files from then on. Placeholders have the form `{{<Placeholder>}}`; any other `{{` in a template is a source error.
+
+| Placeholder | Value |
+|---|---|
+| `{{Name}}` | The name: solution, root namespace and file names. The only placeholder allowed in target paths, such as `{{Name}}.slnx`. |
+| `{{RepositoryUrl}}` | The repository URL |
+| `{{Year}}` | The current year |
+| `{{LayerGuid}}` | A new GUID for the ReSharper layer injection, as 32 uppercase hexadecimal digits |
+| `{{TargetFrameworkProperties}}` | `TargetFramework` for one target framework; for several, `LatestTarget` (the highest version), `MainTargets` and `TargetFrameworks` as in the layout guide |
+| `{{SourceLinkGitLabHost}}` | A `SourceLinkGitLabHost` item for a GitLab host other than `gitlab.com` (BLD-6); otherwise nothing |
+| `{{LicenseNotice}}` | The MIT sentence of the `file_header_template`, as an escaped continuation (`\n…`); nothing with `--private` |
+
+A placeholder on a line of its own takes the line's indentation for every line of its value, and the line is removed when the value is empty.
+
+`init` writes nothing while any target path has a problem of the kind that stops `sync`. An existing `.repo-baseline.json` stops it unless `--force` is given. Otherwise it never changes an existing file without `--force`, with one exception: for `dotnet-nuget`, it adds the key's file name to an existing `.gitignore` that does not list it yet, so that the key cannot be committed by mistake. The key is never printed, and on Unix it is readable only by its owner.
+
+**Adopting an existing repository:** run `init` to add the missing files, then `sync` to update the synced files and blocks that `init` skipped. An existing `<Name>.slnx.DotSettings` does not get the layer injection automatically; `check` reports it until it is added by hand.
 
 ### Versions and distribution
 
