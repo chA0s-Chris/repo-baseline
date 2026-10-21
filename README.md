@@ -50,7 +50,7 @@ dotnet run tool/sync.cs -- init ~/src/Chaos.Example 1.0.0 \
 | `--name` | Solution name and root namespace: dot-separated C# identifiers. It also names the `.slnx`, its `.DotSettings` file and the strong-name key. |
 | `--type` | `application`, or `library` for a published library, which adds the `dotnet-nuget` profile and a strong-name key |
 | `--forge` | `github` or `gitlab`, which selects the profile of that name. The repository URL must be on `github.com` for GitHub and on another host for GitLab. |
-| `--repository-url` | The `https` URL of the repository, without credentials |
+| `--repository-url` | The `https` URL of the repository in normalized form, without credentials, query, fragment, whitespace or the characters `& < > " '` |
 | `--target-frameworks` | One target framework, or a list separated by semicolons |
 | `--private` | Leaves out the MIT `LICENSE` and its mention in the file header |
 | `--force` | Overwrites existing files, except an existing strong-name key |
