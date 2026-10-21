@@ -1,0 +1,6 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "github>chA0s-Chris/repo-baseline//renovate/default"
+  ]
+}

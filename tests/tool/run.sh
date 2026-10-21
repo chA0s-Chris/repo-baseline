@@ -1316,6 +1316,41 @@ expect_status 2
 expect_output "Unknown option '--name'."
 expect_files
 
+# The real profiles of the working tree, committed to a fixture repository, so that templates are tested before they are committed.
+REAL_BASELINE="${WORK}/real-baseline"
+mkdir -p "${REAL_BASELINE}/tool"
+git -C "${REAL_BASELINE}" init --quiet --initial-branch=main
+git -C "${REAL_BASELINE}" config user.email test@example.invalid
+git -C "${REAL_BASELINE}" config user.name test
+cp "${ROOT}/tool/sync.cs" "${REAL_BASELINE}/tool/sync.cs"
+cp -R "${ROOT}/profiles" "${REAL_BASELINE}/profiles"
+commit "${REAL_BASELINE}" "real profiles"
+
+test_case "real profiles: init produces the files of docs/layout-dotnet.md for every type and forge, and check passes"
+for type in application library; do
+    for forge in github gitlab; do
+        new_empty_target "-real-${type}-${forge}"
+        run_tool_from "${REAL_BASELINE}" init "${TARGET}" 1.0.0 --ref main --name Sample.Project --type "${type}" --forge "${forge}" \
+            --repository-url "https://${forge}.com/example/Sample.Project" --target-frameworks 'net10.0;net9.0'
+        expect_status 0
+        # Synced, block and created-once entries of the layout guide; described and optional entries are left out.
+        files=(./.editorconfig ./.gitignore ./.repo-baseline.json ./.repo-baseline/Common.props ./.repo-baseline/ReSharper.DotSettings
+            ./.repo-baseline/Tests.props ./AGENTS.md ./CLAUDE.md ./CODESTYLE.md ./Directory.Build.props ./Directory.Packages.props ./LICENSE
+            ./README.md ./Sample.Project.slnx ./Sample.Project.slnx.DotSettings ./ai-plans/AGENTS.md ./cleanup_code.sh ./coverlet.xml
+            ./dotnet-tools.json ./global.json ./inspect_code.sh ./nuget.config ./renovate.json ./src/AGENTS.md ./src/Directory.Build.props
+            ./tests/AGENTS.md ./tests/Directory.Build.props)
+        [ "${type}" = library ] && files+=(./.repo-baseline/Packaging.props ./Sample.Project.snk)
+        [ "${forge}" = github ] && files+=(./.github/copilot-instructions.md)
+        expect_files "${files[@]}"
+        if grep -rlF '{{' "${TARGET}" --exclude-dir=.git > "${WORK}/unfilled"; then
+            OUTPUT=$(cat "${WORK}/unfilled")
+            fail "expected every placeholder to be filled in"
+        fi
+        run_tool_from "${REAL_BASELINE}" check "${TARGET}" --ref main
+        expect_status 0
+    done
+done
+
 echo
 if [ "${FAILURES}" -eq 0 ]; then
     echo "All ${TESTS} tests passed."

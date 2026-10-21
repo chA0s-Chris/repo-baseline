@@ -1,0 +1,12 @@
+<Project>
+  <Import Project="$([MSBuild]::GetPathOfFileAbove('Directory.Build.props', '$(MSBuildThisFileDirectory)../'))" />
+  <Import Project="$(MSBuildThisFileDirectory)../.repo-baseline/Packaging.props" />
+
+  <PropertyGroup>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <DefineConstants>$(DefineConstants);$(AdditionalConstants)</DefineConstants>
+    <PackageProjectUrl>{{RepositoryUrl}}</PackageProjectUrl>
+    <Copyright>Copyright © {{Year}} Christian Flessa</Copyright>
+  </PropertyGroup>
+  {{SourceLinkGitLabHost}}
+</Project>

@@ -1,0 +1,5 @@
+# BEGIN repo-baseline: editorconfig
+# END repo-baseline: editorconfig
+
+[*.cs]
+file_header_template = Copyright (c) {{Year}} Christian Flessa. All rights reserved.{{LicenseNotice}}

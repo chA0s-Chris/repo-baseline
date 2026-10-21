@@ -24,11 +24,11 @@ The work is one story, but it has two audiences. The command is C# logic that ca
 
 ### Layer 2: Templates
 
-- [ ] The profiles contain a template for every created-once file in `docs/layout-dotnet.md`, including an empty `<Name>.slnx`. The templates follow the encoding rules for synced content and contain no employer or client details.
-- [ ] For each combination of type (application, published library) and forge (GitHub, GitLab), `init` in an empty directory produces exactly the synced, block and created-once files that `docs/layout-dotnet.md` lists for it, excluding described and optional entries, plus `<Name>.snk` for libraries. `check` succeeds directly afterwards.
-- [ ] For both an application and a library, after a solution with one project and one test project has been added, `dotnet tool restore`, `dotnet build -c Release`, `dotnet test` and `./cleanup_code.sh` succeed without manual changes to the generated files, and the cleanup leaves the generated files unchanged. This is verified by hand, because it needs network access.
-- [ ] `bash tests/tool/run.sh` runs `init` and `check` against the real profiles from the working tree for all four combinations of type and forge, and asserts the list of generated files for each.
-- [ ] `docs/layout-dotnet.md` lists `<Name>.slnx` as created once and documents the `init` inputs, including `--private`. Its steps for creating a repository add the projects to the existing `<Name>.slnx`.
+- [x] The profiles contain a template for every created-once file in `docs/layout-dotnet.md`, including an empty `<Name>.slnx`. The templates follow the encoding rules for synced content and contain no employer or client details.
+- [x] For each combination of type (application, published library) and forge (GitHub, GitLab), `init` in an empty directory produces exactly the synced, block and created-once files that `docs/layout-dotnet.md` lists for it, excluding described and optional entries, plus `<Name>.snk` for libraries. `check` succeeds directly afterwards.
+- [x] For both an application and a library, after a solution with one project and one test project has been added, `dotnet tool restore`, `dotnet build -c Release`, `dotnet test` and `./cleanup_code.sh` succeed without manual changes to the generated files, and the cleanup leaves the generated files unchanged. This is verified by hand, because it needs network access.
+- [x] `bash tests/tool/run.sh` runs `init` and `check` against the real profiles from the working tree for all four combinations of type and forge, and asserts the list of generated files for each.
+- [x] `docs/layout-dotnet.md` lists `<Name>.slnx` as created once and documents the `init` inputs, including `--private`. Its steps for creating a repository add the projects to the existing `<Name>.slnx`.
 
 ## Technical Details
 

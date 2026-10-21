@@ -1,0 +1,5 @@
+# BEGIN repo-baseline: gitignore
+# END repo-baseline: gitignore
+
+# Local patterns
+.idea/
