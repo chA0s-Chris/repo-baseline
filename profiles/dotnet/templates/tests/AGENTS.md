@@ -1,6 +1,6 @@
 # Tests
 
-Every production project `src/<Project>` has one test project `tests/<Project>.Tests` whose folders and namespaces mirror the production project. Integration tests live under `Integration/` and carry `[Category("Integration")]`; component tests carry `[Category("Component")]`.
+Tests follow the structure and categories described for `tests/` in the .NET layout guide of repo-baseline.
 
 ## Rules
 

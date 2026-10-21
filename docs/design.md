@@ -27,9 +27,9 @@ Content is organized in profiles, and each repository selects the profiles that 
 
 | Profile | Applies to | Contains |
 |---|---|---|
-| `common` | every repository | `CLAUDE.md`, shared `AGENTS.md` blocks, `ai-plans/AGENTS.md`, `.editorconfig` core, `.gitignore` core |
+| `common` | every repository | `CLAUDE.md`, shared `AGENTS.md` blocks, `ai-plans/AGENTS.md`, `.editorconfig` core, `.gitignore` core; templates for `AGENTS.md`, `.editorconfig`, `.gitignore`, `README.md`, `LICENSE` and `renovate.json` |
 | `dotnet` | every .NET repository | C# `.editorconfig` rules, ReSharper settings, `CODESTYLE.md`, `cleanup_code.sh`, `inspect_code.sh`, shared MSBuild properties, layout templates |
-| `dotnet-nuget` | .NET repositories that publish packages | packaging properties; `init` generates the strong-name key |
+| `dotnet-nuget` | .NET repositories that publish packages | packaging properties; the `src/Directory.Build.props` template; `init` generates the strong-name key |
 | `github` | repositories hosted on GitHub | `.github/copilot-instructions.md` block |
 | `gitlab` | repositories hosted on GitLab | no content yet |
 
