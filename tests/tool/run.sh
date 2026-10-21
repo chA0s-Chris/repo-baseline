@@ -995,6 +995,15 @@ build_init_baseline() {
     init_fixture_ref template-case write "${profiles}/dotnet/templates/readme.md" 'Readme.'
     init_fixture_ref template-markers write "${profiles}/common/templates/.gitignore" '# BEGIN repo-baseline: gitignore' '.idea/'
     init_fixture_ref template-invalid-path write "${profiles}/dotnet/templates/docs." 'Dot.'
+    init_fixture_ref gitignore-directory gitignore_directory "${profiles}"
+}
+
+# Makes .gitignore neither a block target nor a template, and syncs a file below it, so that only the key's .gitignore
+# entry needs .gitignore to be a file.
+gitignore_directory() {
+    sed -i '/"id": "gitignore"/d' "$1/common/profile.json"
+    rm "$1/common/templates/.gitignore"
+    write "$1/dotnet/files/.gitignore/rules" 'Rules.'
 }
 
 # Creates a ref from main of the init fixture whose only commit runs the given command.
@@ -1188,6 +1197,12 @@ printf 'bin/\r\n' > "${TARGET}/.gitignore"
 run_init 1.0.0 "${LIBRARY_ON_GITHUB[@]}"
 expect_status 0
 cmp -s <(printf 'bin/\r\nSample.snk\r\n') "${TARGET}/.gitignore" || fail "expected the key line to keep the CRLF line endings of .gitignore"
+# sync replaces block content, so a key line inside a block does not count.
+new_empty_target -in-block
+write "${TARGET}/.gitignore" '# BEGIN repo-baseline: gitignore' 'Sample.snk' '# END repo-baseline: gitignore'
+run_init 1.0.0 "${LIBRARY_ON_GITHUB[@]}"
+expect_status 0
+expect_file .gitignore '# BEGIN repo-baseline: gitignore' 'Sample.snk' '# END repo-baseline: gitignore' 'Sample.snk'
 
 test_case "init: an existing .gitignore with malformed block markers is a problem, and nothing is written"
 new_empty_target
@@ -1229,7 +1244,8 @@ for case in \
     "template-key|template dotnet-nuget/templates/{{Name}}.snk has the target path of the strong-name key." \
     "template-case|README.md and readme.md differ only in case or Unicode normalization." \
     "template-markers|template common/templates/.gitignore: block gitignore: BEGIN marker on line 1 has no END marker" \
-    "template-invalid-path|template dotnet/templates/docs. is not a valid target path as docs."; do
+    "template-invalid-path|template dotnet/templates/docs. is not a valid target path as docs." \
+    "gitignore-directory|.gitignore is a file, but .gitignore/rules needs it to be a directory."; do
     run_init 1.0.0 "${LIBRARY_ON_GITHUB[@]}" --ref "${case%%|*}"
     expect_status 2
     expect_output "error: ${case%%|*}: ${case#*|}"

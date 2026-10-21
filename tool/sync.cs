@@ -2118,7 +2118,7 @@ internal static class InitCommand
         ExpectedContent.RejectCollidingPaths(label, expected.Files.Select(file => file.Path)
                                                             .Concat(expected.ManagedFiles.Select(managed => managed.Path))
                                                             .Concat(templates.Keys)
-                                                            .Concat(keyPath is null ? [] : [keyPath]));
+                                                            .Concat(keyPath is null ? [] : [keyPath, GitIgnoreFile]));
     }
 
     /// <summary>
@@ -2244,7 +2244,7 @@ internal static class InitCommand
             if (planned >= 0)
             {
                 var write = Writes[planned];
-                if (!Lists(Encoding.UTF8.GetString(write.Content ?? []), keyPath))
+                if (!Lists(Encoding.UTF8.GetString(write.Content ?? []), keyPath, managed))
                 {
                     Writes[planned] = write with { Content = Append(write.Content ?? [], keyPath) };
                 }
@@ -2285,7 +2285,7 @@ internal static class InitCommand
                 }
             }
 
-            if (!Lists(text, keyPath))
+            if (!Lists(text, keyPath, managed))
             {
                 Skipped.Remove(GitIgnoreFile);
                 Writes.Add(new PendingWrite(fullPath, Append(content, keyPath), Executable: null, $"kept, {keyPath} added"));
@@ -2311,7 +2311,21 @@ internal static class InitCommand
             }
         }
 
-        private static Boolean Lists(String text, String line) => TextFile.SplitLines(text.Replace("\r\n", "\n")).Any(candidate => candidate.TrimEnd() == line);
+        /// <summary>
+        /// Whether a line outside the managed blocks equals <paramref name="line"/>. A line inside a block does not count,
+        /// because <c>sync</c> replaces the block content.
+        /// </summary>
+        private static Boolean Lists(String text, String line, ManagedFile? managed)
+        {
+            var lines = TextFile.SplitLines(text.Replace("\r\n", "\n"));
+            var inBlock = new Boolean[lines.Count];
+            foreach (var block in managed is null ? [] : ParsedFile.Parse(lines, managed.Syntax).Blocks)
+            {
+                Array.Fill(inBlock, true, block.BeginLine, block.EndLine - block.BeginLine + 1);
+            }
+
+            return lines.Where((candidate, index) => !inBlock[index]).Any(candidate => candidate.TrimEnd() == line);
+        }
 
         private Boolean IsWritable(String path, out String fullPath, out Boolean exists)
         {
