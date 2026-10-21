@@ -2,7 +2,7 @@
 
 `repo-baseline` keeps the files that many repositories share in one place: code style and formatter settings, agent instructions, helper scripts, common build properties, and the templates and description of a standard repository layout. A small tool copies this content into repositories and checks in CI that it stays unchanged there.
 
-> **Status:** design phase. The design, the decisions, the first profile content and the `sync` and `check` commands exist; `init` does not exist yet. Until `v1.0.0`, anything may change.
+> **Status:** design phase. The design, the decisions, the first profile content and the `init`, `sync` and `check` commands exist. Until `v1.0.0`, anything may change.
 
 ## Why
 
@@ -27,11 +27,38 @@ The tool is a single-file C# app, `tool/sync.cs`. It needs Git and the .NET 10 S
 
 | Command | Effect |
 | --- | --- |
+| `dotnet run tool/sync.cs -- init <path> <version> --name <Name> …` | Sets up a repository: writes the manifest for `<version>`, the synced content, the created-once files from the templates and, for libraries, a strong-name key. See [Setting up a repository](#setting-up-a-repository). |
 | `dotnet run tool/sync.cs -- sync <path>` | Writes the synced content of the release pinned in `<path>/.repo-baseline.json`. |
 | `dotnet run tool/sync.cs -- sync <path> <version>` | Syncs release `<version>` and records it in the manifest. |
 | `dotnet run tool/sync.cs -- check <path>` | Lists every place where synced content differs from the pinned release, a managed block is missing, unknown or malformed, a synced file is not a regular file inside the repository, a managed file is not valid UTF-8, the ReSharper settings do not use the shared layer, or a shared package has no version. |
 
-`check` exits with `1` when it has findings. Both commands exit with `2` on usage, manifest and source errors. `sync` also exits with `2` and writes nothing when a block target file has malformed block markers, when a file the selected profiles use is not valid UTF-8, or when such a file has a symbolic link, a directory or a file in its path where the tool needs a regular file. `--ref <git-ref>` reads the profile content of any Git ref of the `repo-baseline` checkout instead of the pinned release, without changing the manifest.
+`check` exits with `1` when it has findings. All commands exit with `2` on usage, manifest and source errors. `sync` also exits with `2` and writes nothing when a block target file has malformed block markers, when a file the selected profiles use is not valid UTF-8, or when such a file has a symbolic link, a directory or a file in its path where the tool needs a regular file. `--ref <git-ref>` reads the profile content of any Git ref of the `repo-baseline` checkout instead of the pinned release, without changing the manifest.
+
+### Setting up a repository
+
+`init` needs the version to record in the manifest and the inputs from the [layout guide](docs/layout-dotnet.md#creating-a-new-repository):
+
+```bash
+cd ~/src/repo-baseline
+dotnet run tool/sync.cs -- init ~/src/Chaos.Example 1.0.0 \
+    --name Chaos.Example --type library --forge github \
+    --repository-url https://github.com/chA0s-Chris/Chaos.Example --target-frameworks 'net10.0;net9.0'
+```
+
+| Option | Meaning |
+| --- | --- |
+| `--name` | Solution name and root namespace: dot-separated C# identifiers. It also names the `.slnx`, its `.DotSettings` file and the strong-name key. |
+| `--type` | `application`, or `library` for a published library, which adds the `dotnet-nuget` profile and a strong-name key |
+| `--forge` | `github` or `gitlab`, which selects the profile of that name. The repository URL must be on `github.com` for GitHub and on another host for GitLab. |
+| `--repository-url` | The `https` URL of the repository in normalized form, without credentials, query, fragment, whitespace or the characters `& < > " '` |
+| `--target-frameworks` | One target framework, or a list separated by semicolons |
+| `--private` | Leaves out the MIT `LICENSE` and its mention in the file header |
+| `--force` | Overwrites existing files, except an existing strong-name key |
+| `--ref <git-ref>` | Reads the content of another ref; the manifest still records `<version>`, so `check` needs the same `--ref` until that release is tagged |
+
+`init` never changes an existing file unless `--force` is given. It skips existing files and lists them, and it refuses to run when the target already has a `.repo-baseline.json`. Like `sync`, it exits with `2` and writes nothing when a file it would write has a symbolic link, a directory or a file in its path. The only exception is the strong-name key of a library: `init` adds its file name to an existing `.gitignore`, so that the key cannot be committed by mistake. The key is never printed. Store it as a CI secret as described in the layout guide.
+
+To adopt the baseline in an existing repository, run `init` to add the missing files, then `sync` to update the synced files and blocks that `init` skipped. Add the ReSharper layer injection to an existing `<Name>.slnx.DotSettings` by hand; `check` reports it until then. Review the result and commit it.
 
 Run the tool from a `repo-baseline` clone that is outside the target repository, and with the clone as the working directory. Otherwise the target's `global.json`, `Directory.Build.props`, `Directory.Packages.props` or `NuGet.config` apply to the tool and can break it. A relative `<path>` is resolved against the working directory, which is then the clone.
 

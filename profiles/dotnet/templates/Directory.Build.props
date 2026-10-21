@@ -1,0 +1,7 @@
+<Project>
+  <Import Project="$(MSBuildThisFileDirectory).repo-baseline/Common.props" />
+
+  <PropertyGroup>
+    {{TargetFrameworkProperties}}
+  </PropertyGroup>
+</Project>

@@ -1,11 +1,14 @@
 #:property TargetFramework=net10.0
 #:property RollForward=Major
 
-// repo-baseline tool: `sync` writes the synced content of a pinned release into a repository, and
-// `check` reports where that content has been changed locally. docs/design.md describes profiles,
-// managed blocks and the manifest; the README describes how to run the tool.
+// repo-baseline tool: `init` sets up a repository from the templates and synced content of a release,
+// `sync` writes the synced content of a pinned release into a repository, and `check` reports where that
+// content has been changed locally. docs/design.md describes profiles, templates, managed blocks and the
+// manifest; the README describes how to run the tool.
 
 using System.Diagnostics;
+using System.Globalization;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -40,13 +43,22 @@ internal static class Cli
 {
     private const String Usage = """
         Usage:
+          dotnet run tool/sync.cs -- init  <path> <version> --name <Name> --type application|library
+                                           --forge github|gitlab --repository-url <url>
+                                           --target-frameworks <tfm>[;<tfm>...] [--private] [--force]
+                                           [--ref <git-ref>]
           dotnet run tool/sync.cs -- sync  <path> [<version>] [--ref <git-ref>]
           dotnet run tool/sync.cs -- check <path> [--ref <git-ref>]
 
+        init   sets up a repository: writes the manifest for release <version>, the synced content and
+               the created-once files from the templates, and a strong-name key for libraries.
+               It skips existing files and lists them; --force overwrites them, except a key.
+               --private leaves out the LICENSE.
         sync   writes the synced content of the release pinned in <path>/.repo-baseline.json.
                With <version>, it syncs that release and records it in the manifest.
         check  reports synced content that differs from the pinned release.
         --ref  reads the profile content of any Git ref of this repo-baseline checkout instead.
+               init still records <version> in the manifest.
 
         Exit codes: 0 success, 1 check findings, 2 usage, manifest or source errors.
         """;
@@ -63,12 +75,14 @@ internal static class Cli
 
             var options = Options.Parse(args);
             var target = ResolveTarget(options.TargetPath);
+            if (options.Init is { } init)
+            {
+                var version = options.Version ?? throw new UsageException("init needs the version to record in the manifest.");
+                return InitCommand.Run(target, version, init, LoadSource(options.Ref, version));
+            }
+
             var manifest = Manifest.Load(target);
-            var checkout = BaselineCheckout.Locate();
-            var version = options.Version ?? manifest.Version;
-            var source = options.Ref is { } gitRef
-                ? ReleaseSource.Load(checkout, gitRef, label: gitRef, kind: "ref")
-                : ReleaseSource.Load(checkout, $"refs/tags/v{version}", label: $"v{version}", kind: "tag");
+            var source = LoadSource(options.Ref, options.Version ?? manifest.Version);
             var expected = ExpectedContent.Compose(source, manifest.Profiles);
 
             return options.Command == Options.SyncCommand
@@ -97,6 +111,14 @@ internal static class Cli
         }
     }
 
+    private static ReleaseSource LoadSource(String? gitRef, String version)
+    {
+        var checkout = BaselineCheckout.Locate();
+        return gitRef is not null
+            ? ReleaseSource.Load(checkout, gitRef, label: gitRef, kind: "ref")
+            : ReleaseSource.Load(checkout, $"refs/tags/v{version}", label: $"v{version}", kind: "tag");
+    }
+
     private static String ResolveTarget(String path)
     {
         var target = Path.GetFullPath(path);
@@ -114,31 +136,46 @@ internal sealed class UsageException : ToolException
     public UsageException(String message) : base(message) { }
 }
 
-internal sealed record Options(String Command, String TargetPath, String? Version, String? Ref)
+internal sealed record Options(String Command, String TargetPath, String? Version, String? Ref, InitOptions? Init)
 {
+    public const String InitCommand = "init";
     public const String SyncCommand = "sync";
     public const String CheckCommand = "check";
+
+    private const String RefOption = "--ref";
+    private static readonly String[] InitValueOptions = ["--name", "--type", "--forge", "--repository-url", "--target-frameworks"];
+    private static readonly String[] InitFlags = ["--private", "--force"];
 
     public static Options Parse(IReadOnlyList<String> args)
     {
         var positional = new List<String>();
-        String? gitRef = null;
+        var values = new Dictionary<String, String>(StringComparer.Ordinal);
+        var flags = new HashSet<String>(StringComparer.Ordinal);
         for (var index = 0; index < args.Count; index++)
         {
             var argument = args[index];
-            if (argument == "--ref" || argument.StartsWith("--ref=", StringComparison.Ordinal))
+            var name = argument.StartsWith("--", StringComparison.Ordinal) ? argument.Split('=', 2)[0] : argument;
+            if ((positional.Count > 0) && (positional[0] != InitCommand) && (InitValueOptions.Contains(name) || InitFlags.Contains(argument)))
             {
-                if (gitRef is not null)
+                throw new UsageException($"Unknown option '{argument}'.");
+            }
+
+            if ((name == RefOption) || InitValueOptions.Contains(name))
+            {
+                if (values.ContainsKey(name))
                 {
-                    throw new UsageException("--ref is given more than once.");
+                    throw new UsageException($"{name} is given more than once.");
                 }
 
-                gitRef = argument == "--ref"
-                    ? (index + 1 < args.Count ? args[++index] : throw new UsageException("--ref needs a value."))
-                    : argument["--ref=".Length..];
-                if ((gitRef.Length == 0) || gitRef.StartsWith('-'))
+                values[name] = argument == name
+                    ? (index + 1 < args.Count ? args[++index] : throw new UsageException($"{name} needs a value."))
+                    : argument[(name.Length + 1)..];
+            }
+            else if (InitFlags.Contains(argument))
+            {
+                if (!flags.Add(argument))
                 {
-                    throw new UsageException($"'{gitRef}' is not a valid Git ref.");
+                    throw new UsageException($"{argument} is given more than once.");
                 }
             }
             else if (argument.StartsWith('-'))
@@ -151,15 +188,26 @@ internal sealed record Options(String Command, String TargetPath, String? Versio
             }
         }
 
+        var gitRef = values.GetValueOrDefault(RefOption);
+        if ((gitRef is not null) && ((gitRef.Length == 0) || gitRef.StartsWith('-')))
+        {
+            throw new UsageException($"'{gitRef}' is not a valid Git ref.");
+        }
+
         if (positional.Count == 0)
         {
             throw new UsageException("No command given.");
         }
 
         var command = positional[0];
-        if (command is not (SyncCommand or CheckCommand))
+        if (command is not (InitCommand or SyncCommand or CheckCommand))
         {
             throw new UsageException($"Unknown command '{command}'.");
+        }
+
+        if (command != InitCommand && (InitValueOptions.FirstOrDefault(values.ContainsKey) ?? flags.FirstOrDefault()) is { } initOption)
+        {
+            throw new UsageException($"Unknown option '{initOption}'.");
         }
 
         if ((positional.Count < 2) || String.IsNullOrWhiteSpace(positional[1]))
@@ -167,19 +215,26 @@ internal sealed record Options(String Command, String TargetPath, String? Versio
             throw new UsageException($"{command} needs the path of the target repository.");
         }
 
-        var maximum = command == SyncCommand ? 3 : 2;
+        var maximum = command == CheckCommand ? 2 : 3;
         if (positional.Count > maximum)
         {
             throw new UsageException($"Unexpected argument '{positional[maximum]}'.");
         }
 
         var version = positional.Count == 3 ? NormalizeVersion(positional[2]) : null;
+        if (command == InitCommand)
+        {
+            // The manifest needs a version even when the content comes from --ref, so init accepts both.
+            return new Options(command, positional[1], version ?? throw new UsageException("init needs the version to record in the manifest."),
+                               gitRef, InitOptions.Parse(values, flags));
+        }
+
         if ((version is not null) && (gitRef is not null))
         {
             throw new UsageException("<version> and --ref cannot be combined.");
         }
 
-        return new Options(command, positional[1], version, gitRef);
+        return new Options(command, positional[1], version, gitRef, Init: null);
     }
 
     private static String NormalizeVersion(String value)
@@ -192,6 +247,104 @@ internal sealed record Options(String Command, String TargetPath, String? Versio
 
         return version;
     }
+}
+
+/// <summary>
+/// The repository-specific inputs of <c>init</c>, from which it derives the profiles and the template values.
+/// </summary>
+internal sealed record InitOptions(String Name, Boolean Library, String Forge, String RepositoryUrl, Uri Repository,
+                                   IReadOnlyList<String> TargetFrameworks, Boolean Private, Boolean Force)
+{
+    public const String GitHub = "github";
+    public const String GitLab = "gitlab";
+
+    // Dot-separated C# identifiers; the name is also used in file names.
+    private static readonly Regex NamePattern = new(@"^[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)*\z");
+    private static readonly Regex FrameworkPattern = new(@"^net(?<major>0|[1-9][0-9]{0,3})\.(?<minor>0|[1-9][0-9]{0,3})\z");
+
+    /// <summary>
+    /// The profiles of the combination that <c>docs/layout-dotnet.md</c> prescribes, in manifest order.
+    /// </summary>
+    public IReadOnlyList<String> Profiles => Library ? ["common", "dotnet", "dotnet-nuget", Forge] : ["common", "dotnet", Forge];
+
+    public static InitOptions Parse(IReadOnlyDictionary<String, String> values, IReadOnlySet<String> flags)
+    {
+        String[] required = ["--name", "--type", "--forge", "--repository-url", "--target-frameworks"];
+        var missing = required.Where(option => !values.ContainsKey(option)).ToList();
+        if (missing.Count > 0)
+        {
+            throw new UsageException($"init needs {String.Join(", ", missing)}.");
+        }
+
+        var name = values["--name"];
+        if (!NamePattern.IsMatch(name))
+        {
+            throw new UsageException($"'{name}' is not a valid name; use dot-separated C# identifiers such as Chaos.Example.");
+        }
+
+        if (!ReleaseSource.IsRelativePath(name))
+        {
+            throw new UsageException($"'{name}' is not a valid name; it cannot be used in file names on Windows.");
+        }
+
+        var library = values["--type"] switch
+        {
+            "application" => false,
+            "library" => true,
+            var other => throw new UsageException($"'{other}' is not a valid --type; use application or library.")
+        };
+
+        var forge = values["--forge"] is GitHub or GitLab ? values["--forge"] : throw new UsageException($"'{values["--forge"]}' is not a valid --forge; use github or gitlab.");
+
+        // The URL is written as given into XML and Markdown files, so credentials, a query, a fragment and characters that
+        // need escaping there are not accepted, and it must already be in the normalized form.
+        var url = values["--repository-url"];
+        if (!Uri.TryCreate(url, UriKind.Absolute, out var repository) || (repository.Scheme != Uri.UriSchemeHttps) || (repository.Host.Length == 0)
+            || (repository.UserInfo.Length > 0) || (repository.Query.Length > 0) || (repository.Fragment.Length > 0)
+            || url.Any(character => Char.IsWhiteSpace(character) || Char.IsControl(character) || "&<>\"'".Contains(character)))
+        {
+            throw new UsageException($"'{url}' is not a valid --repository-url; use an absolute https URL without credentials, query, fragment, " +
+                                     "whitespace or the characters & < > \" '.");
+        }
+
+        if (repository.AbsoluteUri != url)
+        {
+            throw new UsageException($"'{url}' is not a valid --repository-url; write it in its normalized form, {repository.AbsoluteUri}.");
+        }
+
+        var onGitHub = String.Equals(repository.Host, "github.com", StringComparison.OrdinalIgnoreCase);
+        if ((forge == GitHub) != onGitHub)
+        {
+            throw new UsageException(forge == GitHub
+                                         ? $"--forge github needs a repository URL on github.com, not {repository.Host}."
+                                         : "--forge gitlab needs a repository URL on a GitLab host, not github.com.");
+        }
+
+        var frameworks = values["--target-frameworks"].Split(';');
+        foreach (var framework in frameworks)
+        {
+            if (!FrameworkPattern.IsMatch(framework))
+            {
+                throw new UsageException($"'{framework}' is not a valid target framework; use monikers such as net10.0, separated by semicolons.");
+            }
+        }
+
+        if (frameworks.Distinct(StringComparer.Ordinal).Count() != frameworks.Length)
+        {
+            throw new UsageException("--target-frameworks lists a framework more than once.");
+        }
+
+        return new InitOptions(name, library, forge, url, repository, frameworks, flags.Contains("--private"), flags.Contains("--force"));
+    }
+
+    /// <summary>
+    /// Orders target framework monikers from the highest version to the lowest.
+    /// </summary>
+    public static IEnumerable<String> ByVersionDescending(IEnumerable<String> frameworks) =>
+        frameworks.Select(framework => (Framework: framework, Match: FrameworkPattern.Match(framework)))
+                  .OrderByDescending(entry => Int32.Parse(entry.Match.Groups["major"].Value, CultureInfo.InvariantCulture))
+                  .ThenByDescending(entry => Int32.Parse(entry.Match.Groups["minor"].Value, CultureInfo.InvariantCulture))
+                  .Select(entry => entry.Framework);
 }
 
 internal static class Versions
@@ -418,6 +571,11 @@ internal sealed record SyncedFile(String Path, Byte[] Content, Boolean Executabl
 internal sealed record Profile(String Name, IReadOnlyList<BlockDefinition> Blocks, IReadOnlyList<SyncedFile> Files);
 
 /// <summary>
+/// A created-once file of a profile, before its placeholders are filled in.
+/// </summary>
+internal sealed record TemplateFile(String Path, Byte[] Content, Boolean Executable, String Profile);
+
+/// <summary>
 /// The profiles of one release, read from the Git object store so that the working tree and <c>HEAD</c> do not matter.
 /// </summary>
 internal sealed class ReleaseSource
@@ -425,10 +583,15 @@ internal sealed class ReleaseSource
     private const String ProfilesDirectory = "profiles/";
     private static readonly Regex ReservedName = new(@"^(CON|PRN|AUX|NUL|CONIN\$|CONOUT\$|COM[1-9¹²³]|LPT[1-9¹²³])(\..*)?\z", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
 
-    private ReleaseSource(String label, IReadOnlyDictionary<String, Profile> profiles)
+    private readonly String _checkout;
+    private readonly IReadOnlyDictionary<String, TreeEntry> _entries;
+
+    private ReleaseSource(String label, IReadOnlyDictionary<String, Profile> profiles, String checkout, IReadOnlyDictionary<String, TreeEntry> entries)
     {
         Label = label;
         Profiles = profiles;
+        _checkout = checkout;
+        _entries = entries;
     }
 
     public String Label { get; }
@@ -458,7 +621,20 @@ internal sealed class ReleaseSource
             profiles[name] = LoadProfile(checkout, label, name, entries);
         }
 
-        return new ReleaseSource(label, profiles);
+        return new ReleaseSource(label, profiles, checkout, entries);
+    }
+
+    /// <summary>
+    /// Reads the templates of a profile. Only <c>init</c> needs them, so <c>sync</c> and <c>check</c> do not read the blobs.
+    /// Their target paths may contain placeholders and are validated after they are filled in.
+    /// </summary>
+    public IReadOnlyList<TemplateFile> ReadTemplates(String profile)
+    {
+        var directory = $"{ProfilesDirectory}{profile}/templates/";
+        return _entries.Where(pair => pair.Key.StartsWith(directory, StringComparison.Ordinal))
+                       .Select(pair => new TemplateFile(pair.Key[directory.Length..], ReadBlob(_checkout, pair.Value),
+                                                        IsExecutable(Label, pair.Key, pair.Value), profile))
+                       .ToList();
     }
 
     private static Dictionary<String, TreeEntry> ListTree(String checkout, String label, String tree)
@@ -499,12 +675,7 @@ internal sealed class ReleaseSource
         var files = new List<SyncedFile>();
         foreach (var (path, entry) in entries.Where(pair => pair.Key.StartsWith(filesDirectory, StringComparison.Ordinal)))
         {
-            var executable = entry.Mode switch
-            {
-                "100644" => false,
-                "100755" => true,
-                _ => throw new ToolException($"{label}: {path} has mode {entry.Mode}; only regular files are supported.")
-            };
+            var executable = IsExecutable(label, path, entry);
             // Git trees cannot contain `..` segments, but a backslash in a file name becomes a separator on Windows.
             var targetPath = path[filesDirectory.Length..];
             if (!IsRelativePath(targetPath))
@@ -597,10 +768,18 @@ internal sealed class ReleaseSource
     // A colon would make a Windows drive path (`C:/…`) or an NTFS stream, which `Path.Combine` resolves outside the target.
     // Device names such as `NUL`, names ending in a dot or space, and the characters Windows forbids in file names do not
     // address a regular file on Windows.
-    private static Boolean IsRelativePath(String path) =>
+    public static Boolean IsRelativePath(String path) =>
         !path.StartsWith('/') && !path.Contains('\\') && !path.Contains(':')
         && path.Split('/').All(segment => (segment.Length > 0) && !segment.EndsWith('.') && !segment.EndsWith(' ') && !ReservedName.IsMatch(segment)
                                           && !segment.Any(character => Char.IsControl(character) || "<>\"|?*".Contains(character)));
+
+    private static Boolean IsExecutable(String label, String path, TreeEntry entry) =>
+        entry.Mode switch
+        {
+            "100644" => false,
+            "100755" => true,
+            _ => throw new ToolException($"{label}: {path} has mode {entry.Mode}; only regular files are supported.")
+        };
 
     private static Byte[] ReadBlob(String checkout, TreeEntry entry) => Git.Run(checkout, "cat-file", "blob", entry.Object);
 
@@ -767,7 +946,7 @@ internal sealed class ExpectedContent
             files[file.Path] = file;
         }
 
-        RejectCollidingPaths(source.Label, source.Profiles.Values, files.Keys);
+        RejectCollidingPaths(source.Label, files.Keys.Concat(source.Profiles.Values.SelectMany(profile => profile.Blocks).Select(block => block.File)));
 
         // Every block target file of the release is scanned, so blocks of a removed profile are found.
         var others = source.Profiles.Values.Where(profile => !profileNames.Contains(profile.Name));
@@ -793,12 +972,13 @@ internal sealed class ExpectedContent
     /// The manifest belongs to the target repository, and a target path cannot be a file and a directory at once. Paths are
     /// compared ignoring case and Unicode normalization, because the file systems of Windows and usually macOS would let them
     /// alias. The selected whole
-    /// files are checked together with the block targets of every profile, because all block targets are scanned.
+    /// files are checked together with the block targets of every profile, because all block targets are scanned, and <c>init</c>
+    /// adds its template targets.
     /// </summary>
-    private static void RejectCollidingPaths(String label, IEnumerable<Profile> profiles, IEnumerable<String> selectedFiles)
+    public static void RejectCollidingPaths(String label, IEnumerable<String> targetPaths)
     {
         var paths = new Dictionary<String, String>(StringComparer.OrdinalIgnoreCase);
-        foreach (var path in selectedFiles.Concat(profiles.SelectMany(profile => profile.Blocks).Select(block => block.File)).Distinct(StringComparer.Ordinal))
+        foreach (var path in targetPaths.Distinct(StringComparer.Ordinal))
         {
             if (!paths.TryAdd(path.Normalize(NormalizationForm.FormC), path))
             {
@@ -1135,18 +1315,7 @@ internal static class SyncCommand
             throw new ToolException([..problems, "sync wrote nothing because of the problems above."]);
         }
 
-        for (var index = 0; index < writes.Count; index++)
-        {
-            try
-            {
-                writes[index].Apply();
-            }
-            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
-            {
-                var file = TextFile.Display(Path.GetRelativePath(target, writes[index].Path));
-                throw new ToolException($"Cannot write {file}: {exception.Message} sync stopped after writing {index} other file(s).");
-            }
-        }
+        PendingWrite.ApplyAll(target, writes, "sync");
 
         if (writes.Count == 0)
         {
@@ -1209,8 +1378,7 @@ internal static class SyncCommand
             return null;
         }
 
-        var lines = TextFile.SplitLines(text);
-        var parsed = ParsedFile.Parse(lines, managed.Syntax);
+        var parsed = ParsedFile.Parse(TextFile.SplitLines(text), managed.Syntax);
         var fileProblems = parsed.ProblemsFor(managed);
         if (fileProblems.Count > 0)
         {
@@ -1218,9 +1386,7 @@ internal static class SyncCommand
             return null;
         }
 
-        var finalNewline = (text.Length == 0) || text.EndsWith('\n');
-        finalNewline |= BlockMerger.Merge(lines, parsed, managed);
-        var merged = String.Join("\n", lines) + ((lines.Count > 0) && finalNewline ? "\n" : String.Empty);
+        var merged = BlockMerger.Apply(text, parsed, managed);
 
         // A file whose blocks are already current is left alone, even if it has a BOM or CRLF line endings.
         if (exists && (merged == text))
@@ -1236,24 +1402,61 @@ internal static class SyncCommand
     /// </summary>
     public static Boolean IsUnusedTarget(String target, ManagedFile managed, String path) =>
         (managed.Blocks.Count == 0) && ((TargetPath.Problem(target, managed.Path) is not null) || !File.Exists(path));
+}
 
-    private sealed record PendingWrite(String Path, Byte[]? Content, Boolean? Executable, String Description)
+/// <summary>
+/// A file that <c>sync</c> or <c>init</c> writes once every planned write is known to be possible.
+/// A secret is created only readable and writable by its owner, and never replaces an existing file.
+/// </summary>
+internal sealed record PendingWrite(String Path, Byte[]? Content, Boolean? Executable, String Description, Boolean Secret = false)
+{
+    public void Apply()
     {
-        public void Apply()
+        if (Content is not null)
         {
-            if (Content is not null)
+            if (System.IO.Path.GetDirectoryName(Path) is { } directory)
             {
-                if (System.IO.Path.GetDirectoryName(Path) is { } directory)
-                {
-                    Directory.CreateDirectory(directory);
-                }
-
-                File.WriteAllBytes(Path, Content);
+                Directory.CreateDirectory(directory);
             }
 
-            if (Executable is { } executable)
+            if (Secret)
             {
-                FileModes.SetExecutable(Path, executable);
+                var options = new FileStreamOptions { Mode = FileMode.CreateNew, Access = FileAccess.Write };
+                if (!OperatingSystem.IsWindows())
+                {
+                    options.UnixCreateMode = UnixFileMode.UserRead | UnixFileMode.UserWrite;
+                }
+
+                using var stream = new FileStream(Path, options);
+                stream.Write(Content);
+            }
+            else
+            {
+                File.WriteAllBytes(Path, Content);
+            }
+        }
+
+        if (Executable is { } executable)
+        {
+            FileModes.SetExecutable(Path, executable);
+        }
+    }
+
+    /// <summary>
+    /// Applies the writes in order. A failed write stops the command and reports how many files it wrote before.
+    /// </summary>
+    public static void ApplyAll(String target, IReadOnlyList<PendingWrite> writes, String command)
+    {
+        for (var index = 0; index < writes.Count; index++)
+        {
+            try
+            {
+                writes[index].Apply();
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+            {
+                var file = TextFile.Display(System.IO.Path.GetRelativePath(target, writes[index].Path));
+                throw new ToolException($"Cannot write {file}: {exception.Message} {command} stopped after writing {index} other file(s).");
             }
         }
     }
@@ -1261,6 +1464,18 @@ internal static class SyncCommand
 
 internal static class BlockMerger
 {
+    /// <summary>
+    /// Returns <paramref name="text"/> with its blocks merged as <see cref="Merge"/> describes. <paramref name="parsed"/> must
+    /// come from the lines of <paramref name="text"/> and have no problems.
+    /// </summary>
+    public static String Apply(String text, ParsedFile parsed, ManagedFile managed)
+    {
+        var lines = TextFile.SplitLines(text);
+        var finalNewline = (text.Length == 0) || text.EndsWith('\n');
+        finalNewline |= Merge(lines, parsed, managed);
+        return String.Join("\n", lines) + ((lines.Count > 0) && finalNewline ? "\n" : String.Empty);
+    }
+
     /// <summary>
     /// Replaces the content of defined blocks, removes unknown blocks and inserts missing ones in <paramref name="lines"/>.
     /// Returns whether the file now needs a final newline: a block ends it, or the line that ended it before a removed block now does.
@@ -1632,6 +1847,510 @@ internal static class CheckCommand
         catch (XmlException)
         {
             return null;
+        }
+    }
+}
+
+/// <summary>
+/// A template with its placeholders filled in, at its final target path.
+/// </summary>
+internal sealed record RenderedTemplate(String Path, String Text, Boolean Executable, String Source);
+
+/// <summary>
+/// Placeholders in created-once templates: <c>{{Name}}</c> and the other names that <see cref="Values"/> defines.
+/// </summary>
+internal static class Templates
+{
+    public const String Name = "Name";
+
+    private const String LicenseNotice = @"\nThis file is licensed under the MIT license. See LICENSE in the project root for more information.";
+    private static readonly Regex Placeholder = new(@"\{\{(?<name>[A-Za-z]+)\}\}");
+
+    public static IReadOnlyDictionary<String, String> Values(InitOptions options)
+    {
+        var frameworks = InitOptions.ByVersionDescending(options.TargetFrameworks).ToList();
+        var targetFrameworks = frameworks.Count == 1
+            ? $"<TargetFramework>{frameworks[0]}</TargetFramework>"
+            : $"<LatestTarget>{frameworks[0]}</LatestTarget>\n<MainTargets>$(LatestTarget);{String.Join(';', frameworks.Skip(1))}</MainTargets>\n" +
+              "<TargetFrameworks>$(MainTargets)</TargetFrameworks>";
+
+        // The .NET SDK knows gitlab.com; a self-hosted instance needs its host declared (BLD-6).
+        var selfHostedGitLab = (options.Forge == InitOptions.GitLab) && !String.Equals(options.Repository.Host, "gitlab.com", StringComparison.OrdinalIgnoreCase);
+        return new Dictionary<String, String>(StringComparer.Ordinal)
+        {
+            [Name] = options.Name,
+            ["RepositoryUrl"] = options.RepositoryUrl,
+            ["Year"] = DateTime.Now.Year.ToString(CultureInfo.InvariantCulture),
+            // ReSharper writes layer GUIDs as 32 uppercase hexadecimal digits.
+            ["LayerGuid"] = Guid.NewGuid().ToString("N").ToUpperInvariant(),
+            ["TargetFrameworkProperties"] = targetFrameworks,
+            ["SourceLinkGitLabHost"] = selfHostedGitLab ? $"<ItemGroup>\n  <SourceLinkGitLabHost Include=\"{GitLabHost(options.Repository)}\" />\n</ItemGroup>" : String.Empty,
+            ["LicenseNotice"] = options.Private ? String.Empty : LicenseNotice
+        };
+    }
+
+    // The ASCII form of an internationalized host name, and the port only when it is not the default.
+    private static String GitLabHost(Uri repository) => repository.IsDefaultPort ? repository.IdnHost : $"{repository.IdnHost}:{repository.Port}";
+
+    /// <summary>
+    /// Returns the line and text of the first <c>{{</c> in <paramref name="text"/> that does not start one of the
+    /// <paramref name="allowed"/> placeholders, or <c>null</c> if there is none.
+    /// </summary>
+    public static (Int32 Line, String Token)? FindInvalid(String text, IEnumerable<String> allowed)
+    {
+        var names = allowed.ToHashSet(StringComparer.Ordinal);
+        for (var index = text.IndexOf("{{", StringComparison.Ordinal); index >= 0; index = text.IndexOf("{{", index + 2, StringComparison.Ordinal))
+        {
+            var match = Placeholder.Match(text, index);
+            var placeholder = match.Success && (match.Index == index);
+            if (!placeholder || !names.Contains(match.Groups["name"].Value))
+            {
+                return (text[..index].Count(character => character == '\n') + 1, placeholder ? match.Value : "{{");
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Fills in every placeholder. A placeholder on a line of its own takes the line's indentation for every line of its
+    /// value, and the line is removed when the value is empty. The text must contain only known placeholders.
+    /// </summary>
+    public static String Fill(String text, IReadOnlyDictionary<String, String> values)
+    {
+        var result = new List<String>();
+        foreach (var line in TextFile.SplitLines(text))
+        {
+            var trimmed = line.Trim();
+            var whole = Placeholder.Match(trimmed);
+            if (whole.Success && (whole.Length == trimmed.Length))
+            {
+                var indent = line[..(line.Length - line.TrimStart().Length)];
+                var value = values[whole.Groups["name"].Value];
+                if (value.Length > 0)
+                {
+                    result.AddRange(value.Split('\n').Select(valueLine => valueLine.Length == 0 ? valueLine : indent + valueLine));
+                }
+            }
+            else
+            {
+                result.Add(Placeholder.Replace(line, match => values[match.Groups["name"].Value]));
+            }
+        }
+
+        return String.Join("\n", result) + (text.EndsWith('\n') && (result.Count > 0) ? "\n" : String.Empty);
+    }
+}
+
+internal static class StrongNameKey
+{
+    /// <summary>
+    /// Generates a 1024-bit RSA key pair as a CAPI private key blob, the format of the <c>.snk</c> files that <c>sn -k</c> writes.
+    /// </summary>
+    public static Byte[] Generate()
+    {
+        using var rsa = new RSACryptoServiceProvider(1024);
+        return rsa.ExportCspBlob(includePrivateParameters: true);
+    }
+}
+
+internal static class InitCommand
+{
+    private const String GitIgnoreFile = ".gitignore";
+    private const String LicenseFile = "LICENSE";
+
+    public static Int32 Run(String target, String version, InitOptions options, ReleaseSource source)
+    {
+        var profiles = options.Profiles;
+        var expected = ExpectedContent.Compose(source, profiles);
+        var templates = RenderTemplates(source, options, Templates.Values(options));
+        var keyPath = options.Library ? $"{options.Name}.snk" : null;
+        RejectCollisions(source.Label, expected, templates, keyPath);
+
+        // Block targets of unselected profiles get nothing written; a template on such a path is an ordinary template.
+        var blockTargets = expected.ManagedFiles.Where(managed => managed.Blocks.Count > 0).ToList();
+        RejectMalformedTemplates(source.Label, templates, blockTargets);
+
+        if (File.Exists(Path.Combine(target, Manifest.FileName)) && !options.Force)
+        {
+            throw new ToolException($"{target} already has {Manifest.FileName}. Use sync to update its synced content, or init --force to overwrite its files.");
+        }
+
+        var plan = new Plan(target, options.Force);
+        plan.Add(Manifest.FileName, ManifestContent(version, profiles), executable: false);
+        foreach (var file in expected.Files)
+        {
+            plan.Add(file.Path, file.Content, file.Executable);
+        }
+
+        foreach (var template in templates.Values.Where(template => blockTargets.All(managed => managed.Path != template.Path)))
+        {
+            plan.Add(template.Path, Encoding.UTF8.GetBytes(template.Text), template.Executable);
+        }
+
+        foreach (var managed in blockTargets)
+        {
+            plan.AddManaged(managed, templates.GetValueOrDefault(managed.Path));
+        }
+
+        if (keyPath is not null)
+        {
+            // The key is ignored before it is written, so a failed write never leaves it unignored.
+            plan.Ignore(keyPath, blockTargets.FirstOrDefault(managed => managed.Path == GitIgnoreFile));
+            plan.AddKey(keyPath);
+        }
+
+        if (plan.Problems.Count > 0)
+        {
+            throw new ToolException([..plan.Problems, "init wrote nothing because of the problems above."]);
+        }
+
+        PendingWrite.ApplyAll(target, plan.Writes, "init");
+
+        Console.WriteLine($"Initialized {target} with {source.Label}, profiles {String.Join(", ", profiles)}:");
+        foreach (var write in plan.Writes)
+        {
+            Console.WriteLine($"  {TextFile.Display(Path.GetRelativePath(target, write.Path))}: {write.Description}");
+        }
+
+        if (plan.Skipped.Count > 0)
+        {
+            Console.WriteLine("Skipped existing files; --force overwrites them, except a strong-name key:");
+            foreach (var skipped in plan.Skipped)
+            {
+                Console.WriteLine($"  {skipped}");
+            }
+
+            if (plan.SkippedFiles)
+            {
+                Console.WriteLine("Run sync to update the synced content and blocks of skipped files.");
+            }
+        }
+
+        return ExitCodes.Success;
+    }
+
+    private static Byte[] ManifestContent(String version, IReadOnlyList<String> profiles) =>
+        Encoding.UTF8.GetBytes($$"""
+                                 {
+                                   "version": "{{version}}",
+                                   "profiles": [{{String.Join(", ", profiles.Select(profile => $"\"{profile}\""))}}],
+                                   "inspection": {
+                                     "suppressedIds": []
+                                   }
+                                 }
+
+                                 """);
+
+    /// <summary>
+    /// Reads and fills the templates of the selected profiles. A template replaces one of an earlier profile at the same
+    /// target path. Placeholders are validated in every template, including a <c>LICENSE</c> that <c>--private</c> leaves out.
+    /// </summary>
+    private static OrderedDictionary<String, RenderedTemplate> RenderTemplates(ReleaseSource source, InitOptions options, IReadOnlyDictionary<String, String> values)
+    {
+        var rendered = new OrderedDictionary<String, RenderedTemplate>(StringComparer.Ordinal);
+        foreach (var profile in options.Profiles)
+        {
+            foreach (var template in source.ReadTemplates(profile))
+            {
+                var origin = $"{profile}/templates/{template.Path}";
+                if (Templates.FindInvalid(template.Path, [Templates.Name]) is { } invalidInPath)
+                {
+                    throw new ToolException($"{source.Label}: template {origin}: {invalidInPath.Token} is not allowed in a path; only {{{{{Templates.Name}}}}} is.");
+                }
+
+                var path = template.Path.Replace($"{{{{{Templates.Name}}}}}", options.Name, StringComparison.Ordinal);
+                if (!ReleaseSource.IsRelativePath(path))
+                {
+                    throw new ToolException($"{source.Label}: template {origin} is not a valid target path as {path}; templates need relative paths inside the repository " +
+                                            "that are valid on Windows, too.");
+                }
+
+                if (!TextFile.TryDecode(template.Content, out var text))
+                {
+                    throw new ToolException($"{source.Label}: template {origin} is not valid UTF-8.");
+                }
+
+                if (Templates.FindInvalid(text, values.Keys) is { } invalid)
+                {
+                    throw new ToolException(invalid.Token == "{{"
+                                                ? $"{source.Label}: template {origin}: line {invalid.Line}: '{{{{' does not start a placeholder."
+                                                : $"{source.Label}: template {origin}: line {invalid.Line}: unknown placeholder {invalid.Token}.");
+                }
+
+                if (options.Private && (path == LicenseFile))
+                {
+                    continue;
+                }
+
+                rendered[path] = new RenderedTemplate(path, Templates.Fill(text, values), template.Executable, origin);
+            }
+        }
+
+        return rendered;
+    }
+
+    private static void RejectCollisions(String label, ExpectedContent expected, OrderedDictionary<String, RenderedTemplate> templates, String? keyPath)
+    {
+        foreach (var template in templates.Values)
+        {
+            if (expected.Files.FirstOrDefault(file => file.Path == template.Path) is { } file)
+            {
+                throw new ToolException($"{label}: template {template.Source} has the target path of a synced file of profile {file.Profile}.");
+            }
+
+            if (String.Equals(template.Path, Manifest.FileName, StringComparison.OrdinalIgnoreCase))
+            {
+                throw new ToolException($"{label}: template {template.Source} has the target path of {Manifest.FileName}, which init writes itself.");
+            }
+
+            if (String.Equals(template.Path, keyPath, StringComparison.OrdinalIgnoreCase))
+            {
+                throw new ToolException($"{label}: template {template.Source} has the target path of the strong-name key.");
+            }
+        }
+
+        if (expected.Files.FirstOrDefault(file => String.Equals(file.Path, keyPath, StringComparison.OrdinalIgnoreCase)) is { } keyFile)
+        {
+            throw new ToolException($"{label}: profile {keyFile.Profile} syncs {keyFile.Path}, the target path of the strong-name key.");
+        }
+
+        ExpectedContent.RejectCollidingPaths(label, expected.Files.Select(file => file.Path)
+                                                            .Concat(expected.ManagedFiles.Select(managed => managed.Path))
+                                                            .Concat(templates.Keys)
+                                                            .Concat(keyPath is null ? [] : [keyPath, GitIgnoreFile]));
+    }
+
+    /// <summary>
+    /// A template of a block target must have usable block markers, because init fills its blocks.
+    /// </summary>
+    private static void RejectMalformedTemplates(String label, OrderedDictionary<String, RenderedTemplate> templates, IReadOnlyList<ManagedFile> blockTargets)
+    {
+        foreach (var managed in blockTargets)
+        {
+            if (templates.GetValueOrDefault(managed.Path) is not { } template)
+            {
+                continue;
+            }
+
+            var problems = ParsedFile.Parse(TextFile.SplitLines(template.Text), managed.Syntax).ProblemsFor(managed);
+            if (problems.Count > 0)
+            {
+                throw new ToolException(problems.Select(problem => $"{label}: template {template.Source}: {problem}").ToList());
+            }
+        }
+    }
+
+    /// <summary>
+    /// Collects the writes of init and the files it skips. Nothing is written while problems remain.
+    /// </summary>
+    private sealed class Plan
+    {
+        private readonly Boolean _force;
+        private readonly String _target;
+        private Boolean _keySkipped;
+
+        public Plan(String target, Boolean force)
+        {
+            _target = target;
+            _force = force;
+        }
+
+        public List<String> Problems { get; } = [];
+
+        public List<String> Skipped { get; } = [];
+
+        /// <summary>
+        /// Whether files other than an existing strong-name key were skipped, which <c>sync</c> can update.
+        /// </summary>
+        public Boolean SkippedFiles => Skipped.Count > (_keySkipped ? 1 : 0);
+
+        public List<PendingWrite> Writes { get; } = [];
+
+        public void Add(String path, Byte[] content, Boolean executable)
+        {
+            if (IsWritable(path, out var fullPath, out var exists))
+            {
+                Writes.Add(new PendingWrite(fullPath, content, executable, exists ? "overwritten" : "created"));
+            }
+        }
+
+        /// <summary>
+        /// Writes a block target from its template, or merges the blocks into the existing file or an empty one.
+        /// </summary>
+        public void AddManaged(ManagedFile managed, RenderedTemplate? template)
+        {
+            if (!IsWritable(managed.Path, out var fullPath, out var exists))
+            {
+                return;
+            }
+
+            String text;
+            if (template is not null)
+            {
+                text = template.Text;
+            }
+            else if (!exists)
+            {
+                text = String.Empty;
+            }
+            else if (!TextFile.TryDecode(File.ReadAllBytes(fullPath), out text))
+            {
+                Problems.Add($"{TextFile.Display(managed.Path)}: not valid UTF-8");
+                return;
+            }
+
+            var parsed = ParsedFile.Parse(TextFile.SplitLines(text), managed.Syntax);
+            var problems = parsed.ProblemsFor(managed);
+            if (problems.Count > 0)
+            {
+                Problems.AddRange(problems.Select(problem => $"{TextFile.Display(managed.Path)}: {problem}"));
+                return;
+            }
+
+            var description = !exists ? "created" : template is not null ? "overwritten" : "blocks merged";
+            Writes.Add(new PendingWrite(fullPath, Encoding.UTF8.GetBytes(BlockMerger.Apply(text, parsed, managed)), template?.Executable, description));
+        }
+
+        /// <summary>
+        /// A new key would change the strong-name identity of a published library, so an existing one is kept even with --force.
+        /// </summary>
+        public void AddKey(String path)
+        {
+            if (TargetPath.Problem(_target, path) is { } problem)
+            {
+                Problems.Add(problem);
+            }
+            else if (File.Exists(Path.Combine(_target, path)))
+            {
+                Skipped.Add($"{path}: an existing strong-name key is never replaced");
+                _keySkipped = true;
+            }
+            else
+            {
+                Writes.Add(new PendingWrite(Path.Combine(_target, path), StrongNameKey.Generate(), Executable: null, "created; the strong-name key, never commit it", Secret: true));
+            }
+        }
+
+        /// <summary>
+        /// Adds the key to the local part of <c>.gitignore</c>, also to an existing file, so that it cannot be committed by mistake.
+        /// An existing file with malformed block markers is a problem: the line could end up inside a block, which <c>sync</c>
+        /// later replaces.
+        /// </summary>
+        public void Ignore(String keyPath, ManagedFile? managed)
+        {
+            var fullPath = Path.Combine(_target, GitIgnoreFile);
+            var planned = Writes.FindIndex(write => write.Path == fullPath);
+            if (planned >= 0)
+            {
+                var write = Writes[planned];
+                if (!Lists(Encoding.UTF8.GetString(write.Content ?? []), keyPath, managed))
+                {
+                    Writes[planned] = write with { Content = Append(write.Content ?? [], keyPath) };
+                }
+
+                return;
+            }
+
+            if (TargetPath.Problem(_target, GitIgnoreFile) is { } problem)
+            {
+                AddProblem(problem);
+                return;
+            }
+
+            if (!File.Exists(fullPath))
+            {
+                Writes.Add(new PendingWrite(fullPath, Encoding.UTF8.GetBytes($"{keyPath}\n"), Executable: null, "created"));
+                return;
+            }
+
+            var content = File.ReadAllBytes(fullPath);
+            if (!TextFile.TryDecode(content, out var text))
+            {
+                AddProblem($"{GitIgnoreFile}: not valid UTF-8, so {keyPath} cannot be added to it");
+                return;
+            }
+
+            if (managed is not null)
+            {
+                var problems = ParsedFile.Parse(TextFile.SplitLines(text), managed.Syntax).ProblemsFor(managed);
+                if (problems.Count > 0)
+                {
+                    foreach (var parseProblem in problems)
+                    {
+                        AddProblem($"{GitIgnoreFile}: {parseProblem}");
+                    }
+
+                    return;
+                }
+            }
+
+            if (!Lists(text, keyPath, managed))
+            {
+                Skipped.Remove(GitIgnoreFile);
+                Writes.Add(new PendingWrite(fullPath, Append(content, keyPath), Executable: null, $"kept, {keyPath} added"));
+            }
+        }
+
+        /// <summary>
+        /// Appends a line with the line ending the content already uses.
+        /// </summary>
+        private static Byte[] Append(Byte[] content, String line)
+        {
+            var newline = content.AsSpan().IndexOf("\r\n"u8) >= 0 ? "\r\n" : "\n";
+            var separator = (content.Length > 0) && (content[^1] != (Byte)'\n') ? newline : String.Empty;
+            return [..content, ..Encoding.UTF8.GetBytes($"{separator}{line}{newline}")];
+        }
+
+        // AddManaged may already have reported the same problem for a forced .gitignore.
+        private void AddProblem(String problem)
+        {
+            if (!Problems.Contains(problem))
+            {
+                Problems.Add(problem);
+            }
+        }
+
+        /// <summary>
+        /// Whether a line outside the managed blocks equals <paramref name="line"/> and no negation (<c>!…</c>) follows it.
+        /// A line inside a block does not count, because <c>sync</c> replaces the block content. A later negation may
+        /// re-include the key, so the line is appended again rather than evaluating Git's patterns.
+        /// </summary>
+        private static Boolean Lists(String text, String line, ManagedFile? managed)
+        {
+            var lines = TextFile.SplitLines(text.Replace("\r\n", "\n"));
+            var inBlock = new Boolean[lines.Count];
+            foreach (var block in managed is null ? [] : ParsedFile.Parse(lines, managed.Syntax).Blocks)
+            {
+                Array.Fill(inBlock, true, block.BeginLine, block.EndLine - block.BeginLine + 1);
+            }
+
+            var last = lines.Count - 1;
+            while ((last >= 0) && (inBlock[last] || (lines[last].TrimEnd() != line)))
+            {
+                last--;
+            }
+
+            return (last >= 0) && !lines.Skip(last + 1).Any(candidate => candidate.StartsWith('!'));
+        }
+
+        private Boolean IsWritable(String path, out String fullPath, out Boolean exists)
+        {
+            fullPath = Path.Combine(_target, path);
+            exists = File.Exists(fullPath);
+            if (TargetPath.Problem(_target, path) is { } problem)
+            {
+                Problems.Add(problem);
+                return false;
+            }
+
+            if (exists && !_force)
+            {
+                Skipped.Add(path);
+                return false;
+            }
+
+            return true;
         }
     }
 }

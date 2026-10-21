@@ -12,12 +12,12 @@ The project is in its design phase. Read `docs/design.md` before changing anythi
 | `docs/decisions.md` | The decisions behind the profile content, with their status and reasons |
 | `docs/layout-dotnet.md` | The standard layout of a .NET repository that uses the `dotnet` profile |
 | `ai-plans/` | Guided Coding plans and plan deviation files |
-| `profiles/` | Profile content: one directory per profile, as described under "Profile storage" in `docs/design.md` |
-| `tool/sync.cs` | The tool: a single-file C# app with the `sync` and `check` commands, described under "Tool" in `docs/design.md` |
+| `profiles/` | Profile content: one directory per profile with synced files, block fragments and created-once templates, as described under "Profile storage" in `docs/design.md` |
+| `tool/sync.cs` | The tool: a single-file C# app with the `init`, `sync` and `check` commands, described under "Tool" in `docs/design.md` |
 | `tests/scripts/` | Tests for the shared code-style scripts |
 | `tests/tool/` | Tests for the tool |
 
-`init` (#3) and the Renovate preset (`renovate/default.json`) do not exist yet.
+The Renovate preset (`renovate/default.json`) does not exist yet.
 
 ## Local Development Commands
 
@@ -25,11 +25,12 @@ The project is in its design phase. Read `docs/design.md` before changing anythi
 | --- | --- |
 | Test the shared code-style scripts | `bash tests/scripts/run.sh` |
 | Test the tool | `bash tests/tool/run.sh` |
+| Set up a repository | `dotnet run tool/sync.cs -- init <path> <version> --name <Name> --type application\|library --forge github\|gitlab --repository-url <url> --target-frameworks <tfm>[;<tfm>…]`, optionally with `--private`, `--force` and `--ref <git-ref>` |
 | Sync or check a repository | `dotnet run tool/sync.cs -- sync <path>` or `… check <path>`, optionally with `--ref <git-ref>` |
 
 The script tests need bash, Git and `jq`. They run the scripts against a stub `dotnet`, so they cover argument handling, file selection and report filtering, but not ReSharper itself.
 
-The tool needs Git and the .NET 10 SDK or later; its tests also need bash. The tests build a fixture `repo-baseline` repository with its own profiles under `tmp/`, so changes to the real profiles do not affect them. Run the tool from this repository, not from inside the target repository.
+The tool needs Git and the .NET 10 SDK or later; its tests also need bash. The tests build fixture `repo-baseline` repositories with their own profiles and templates under `tmp/`, so changes to the real profiles do not affect them. Run the tool from this repository, not from inside the target repository.
 
 ## Rules for This Repository
 

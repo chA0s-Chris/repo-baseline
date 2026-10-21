@@ -46,7 +46,7 @@ Decisions referenced as `CS-…`, `BLD-…` and so on are recorded in [decisions
 ├── .editorconfig                 block
 ├── .gitignore                    block
 ├── .repo-baseline.json           created once
-├── <Name>.slnx                   described
+├── <Name>.slnx                   created once
 ├── <Name>.slnx.DotSettings       created once
 ├── <Name>.snk                    ignored, dotnet-nuget only
 ├── AGENTS.md                     block
@@ -105,7 +105,7 @@ The root `AGENTS.md` keeps a table of local development commands with at least t
 
 | File | Kind | Notes |
 |---|---|---|
-| `<Name>.slnx` | described | The solution uses the XML format (`.slnx`). It contains every project in `src/`, `tests/`, `benchmarks/` and `build/`. |
+| `<Name>.slnx` | created once | The solution uses the XML format (`.slnx`). `init` creates it without projects; add every project in `src/`, `tests/`, `benchmarks/` and `build/` with `dotnet sln <Name>.slnx add`. |
 | `Directory.Build.props` | created once | Imports `.repo-baseline/Common.props`, then defines the target frameworks (see below) and local overrides. |
 | `Directory.Packages.props` | created once | Enables Central Package Management (`ManagePackageVersionsCentrally`) and contains a `PackageVersion` for every referenced package, including those referenced by synced `.props` files. Projects reference packages without versions. |
 | `global.json` | created once | Pins the SDK: `version` is a full SDK version, `rollForward` is `latestFeature`, `allowPrerelease` is `false`. Renovate updates it. |
@@ -203,18 +203,19 @@ Both are in the shared `.gitignore` block. `.idea/` is ignored in the local part
 
 Required inputs:
 
-| Input | Example |
-|---|---|
-| Name (solution and root namespace) | `Chaos.Example` |
-| Project type | application or published library |
-| Forge | GitHub or GitLab, including the repository URL |
-| Target frameworks | `net10.0`, or a list for libraries |
-| Optional parts | `build/`, `benchmarks/`, `docs/`, Aspire (`src/Aspire/`, `tests/Aspire/`) |
+| Input | `init` option | Example |
+|---|---|---|
+| Name (solution and root namespace) | `--name` | `Chaos.Example` |
+| Project type | `--type` | `application` or `library` (published library) |
+| Forge, including the repository URL | `--forge`, `--repository-url` | `github` and `https://github.com/chA0s-Chris/Chaos.Example` |
+| Target frameworks | `--target-frameworks` | `net10.0`, or a list such as `'net10.0;net9.0'` for libraries |
+| Visibility | `--private` for a private repository | public by default |
+| Optional parts | none; added by hand | `build/`, `benchmarks/`, `docs/`, Aspire (`src/Aspire/`, `tests/Aspire/`) |
 
 Steps:
 
-1. Run `init` with the profiles `common`, `dotnet`, `github` or `gitlab`, and `dotnet-nuget` for published libraries. It writes all synced and created-once files, generates the strong-name key for libraries, and adds `.idea/` and the key's file name to the local part of `.gitignore`.
-2. Create the solution `<Name>.slnx` and the projects in `src/` and `tests/`, and add them to the solution.
+1. Run `init` with these inputs and the `repo-baseline` version (see the README). It selects the profiles `common`, `dotnet`, `dotnet-nuget` for published libraries, and `github` or `gitlab`. It writes all synced and created-once files, including an empty `<Name>.slnx`, generates the strong-name key for libraries, and adds `.idea/` and the key's file name to the local part of `.gitignore`. A private repository gets no `LICENSE`, and its file header does not mention the MIT license.
+2. Create the projects in `src/` and `tests/` and add them to the existing `<Name>.slnx` with `dotnet sln <Name>.slnx add`.
 3. Fill in the local parts: project description and structure in `AGENTS.md`, the project overview in `src/AGENTS.md`, package metadata in `src/Directory.Build.props`, and the package versions in `Directory.Packages.props`.
 4. Add `build/` and the CI workflow if needed. For published libraries, store the Base64-encoded strong-name key as a CI secret.
 5. Run `dotnet tool restore`, `dotnet build -c Release`, `dotnet test`, `./cleanup_code.sh` and the `check` command. All must succeed before the first commit.
