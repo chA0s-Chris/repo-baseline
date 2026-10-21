@@ -155,6 +155,11 @@ internal sealed record Options(String Command, String TargetPath, String? Versio
         {
             var argument = args[index];
             var name = argument.StartsWith("--", StringComparison.Ordinal) ? argument.Split('=', 2)[0] : argument;
+            if ((positional.Count > 0) && (positional[0] != InitCommand) && (InitValueOptions.Contains(name) || InitFlags.Contains(argument)))
+            {
+                throw new UsageException($"Unknown option '{argument}'.");
+            }
+
             if ((name == RefOption) || InitValueOptions.Contains(name))
             {
                 if (values.ContainsKey(name))
@@ -255,7 +260,7 @@ internal sealed record InitOptions(String Name, Boolean Library, String Forge, S
 
     // Dot-separated C# identifiers; the name is also used in file names.
     private static readonly Regex NamePattern = new(@"^[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)*\z");
-    private static readonly Regex FrameworkPattern = new(@"^net(?<major>[0-9]{1,4})\.(?<minor>[0-9]{1,4})\z");
+    private static readonly Regex FrameworkPattern = new(@"^net(?<major>0|[1-9][0-9]{0,3})\.(?<minor>0|[1-9][0-9]{0,3})\z");
 
     /// <summary>
     /// The profiles of the combination that <c>docs/layout-dotnet.md</c> prescribes, in manifest order.
@@ -277,6 +282,11 @@ internal sealed record InitOptions(String Name, Boolean Library, String Forge, S
             throw new UsageException($"'{name}' is not a valid name; use dot-separated C# identifiers such as Chaos.Example.");
         }
 
+        if (!ReleaseSource.IsRelativePath(name))
+        {
+            throw new UsageException($"'{name}' is not a valid name; it cannot be used in file names on Windows.");
+        }
+
         var library = values["--type"] switch
         {
             "application" => false,
@@ -286,12 +296,20 @@ internal sealed record InitOptions(String Name, Boolean Library, String Forge, S
 
         var forge = values["--forge"] is GitHub or GitLab ? values["--forge"] : throw new UsageException($"'{values["--forge"]}' is not a valid --forge; use github or gitlab.");
 
-        // The URL ends up in created files, so credentials, a query or a fragment are not accepted.
+        // The URL is written as given into XML and Markdown files, so credentials, a query, a fragment and characters that
+        // need escaping there are not accepted, and it must already be in the normalized form.
         var url = values["--repository-url"];
         if (!Uri.TryCreate(url, UriKind.Absolute, out var repository) || (repository.Scheme != Uri.UriSchemeHttps) || (repository.Host.Length == 0)
-            || (repository.UserInfo.Length > 0) || (repository.Query.Length > 0) || (repository.Fragment.Length > 0))
+            || (repository.UserInfo.Length > 0) || (repository.Query.Length > 0) || (repository.Fragment.Length > 0)
+            || url.Any(character => Char.IsWhiteSpace(character) || Char.IsControl(character) || "&<>\"'".Contains(character)))
         {
-            throw new UsageException($"'{url}' is not a valid --repository-url; use an absolute https URL without credentials, query or fragment.");
+            throw new UsageException($"'{url}' is not a valid --repository-url; use an absolute https URL without credentials, query, fragment, " +
+                                     "whitespace or the characters & < > \" '.");
+        }
+
+        if (repository.AbsoluteUri != url)
+        {
+            throw new UsageException($"'{url}' is not a valid --repository-url; write it in its normalized form, {repository.AbsoluteUri}.");
         }
 
         var onGitHub = String.Equals(repository.Host, "github.com", StringComparison.OrdinalIgnoreCase);
@@ -1866,10 +1884,13 @@ internal static class Templates
             // ReSharper writes layer GUIDs as 32 uppercase hexadecimal digits.
             ["LayerGuid"] = Guid.NewGuid().ToString("N").ToUpperInvariant(),
             ["TargetFrameworkProperties"] = targetFrameworks,
-            ["SourceLinkGitLabHost"] = selfHostedGitLab ? $"<ItemGroup>\n  <SourceLinkGitLabHost Include=\"{options.Repository.Authority}\" />\n</ItemGroup>" : String.Empty,
+            ["SourceLinkGitLabHost"] = selfHostedGitLab ? $"<ItemGroup>\n  <SourceLinkGitLabHost Include=\"{GitLabHost(options.Repository)}\" />\n</ItemGroup>" : String.Empty,
             ["LicenseNotice"] = options.Private ? String.Empty : LicenseNotice
         };
     }
+
+    // The ASCII form of an internationalized host name, and the port only when it is not the default.
+    private static String GitLabHost(Uri repository) => repository.IsDefaultPort ? repository.IdnHost : $"{repository.IdnHost}:{repository.Port}";
 
     /// <summary>
     /// Returns the line and text of the first <c>{{</c> in <paramref name="text"/> that does not start one of the
@@ -1974,8 +1995,9 @@ internal static class InitCommand
 
         if (keyPath is not null)
         {
+            // The key is ignored before it is written, so a failed write never leaves it unignored.
+            plan.Ignore(keyPath, blockTargets.FirstOrDefault(managed => managed.Path == GitIgnoreFile));
             plan.AddKey(keyPath);
-            plan.Ignore(keyPath);
         }
 
         if (plan.Problems.Count > 0)
@@ -1999,7 +2021,10 @@ internal static class InitCommand
                 Console.WriteLine($"  {skipped}");
             }
 
-            Console.WriteLine("Run sync to update the synced content and blocks of skipped files.");
+            if (plan.SkippedFiles)
+            {
+                Console.WriteLine("Run sync to update the synced content and blocks of skipped files.");
+            }
         }
 
         return ExitCodes.Success;
@@ -2123,6 +2148,7 @@ internal static class InitCommand
     {
         private readonly Boolean _force;
         private readonly String _target;
+        private Boolean _keySkipped;
 
         public Plan(String target, Boolean force)
         {
@@ -2133,6 +2159,11 @@ internal static class InitCommand
         public List<String> Problems { get; } = [];
 
         public List<String> Skipped { get; } = [];
+
+        /// <summary>
+        /// Whether files other than an existing strong-name key were skipped, which <c>sync</c> can update.
+        /// </summary>
+        public Boolean SkippedFiles => Skipped.Count > (_keySkipped ? 1 : 0);
 
         public List<PendingWrite> Writes { get; } = [];
 
@@ -2193,6 +2224,7 @@ internal static class InitCommand
             else if (File.Exists(Path.Combine(_target, path)))
             {
                 Skipped.Add($"{path}: an existing strong-name key is never replaced");
+                _keySkipped = true;
             }
             else
             {
@@ -2202,8 +2234,10 @@ internal static class InitCommand
 
         /// <summary>
         /// Adds the key to the local part of <c>.gitignore</c>, also to an existing file, so that it cannot be committed by mistake.
+        /// An existing file with malformed block markers is a problem: the line could end up inside a block, which <c>sync</c>
+        /// later replaces.
         /// </summary>
-        public void Ignore(String keyPath)
+        public void Ignore(String keyPath, ManagedFile? managed)
         {
             var fullPath = Path.Combine(_target, GitIgnoreFile);
             var planned = Writes.FindIndex(write => write.Path == fullPath);
@@ -2220,11 +2254,7 @@ internal static class InitCommand
 
             if (TargetPath.Problem(_target, GitIgnoreFile) is { } problem)
             {
-                if (!Problems.Contains(problem))
-                {
-                    Problems.Add(problem);
-                }
-
+                AddProblem(problem);
                 return;
             }
 
@@ -2237,8 +2267,22 @@ internal static class InitCommand
             var content = File.ReadAllBytes(fullPath);
             if (!TextFile.TryDecode(content, out var text))
             {
-                Problems.Add($"{GitIgnoreFile}: not valid UTF-8, so {keyPath} cannot be added to it");
+                AddProblem($"{GitIgnoreFile}: not valid UTF-8, so {keyPath} cannot be added to it");
                 return;
+            }
+
+            if (managed is not null)
+            {
+                var problems = ParsedFile.Parse(TextFile.SplitLines(text), managed.Syntax).ProblemsFor(managed);
+                if (problems.Count > 0)
+                {
+                    foreach (var parseProblem in problems)
+                    {
+                        AddProblem($"{GitIgnoreFile}: {parseProblem}");
+                    }
+
+                    return;
+                }
             }
 
             if (!Lists(text, keyPath))
@@ -2248,13 +2292,26 @@ internal static class InitCommand
             }
         }
 
+        /// <summary>
+        /// Appends a line with the line ending the content already uses.
+        /// </summary>
         private static Byte[] Append(Byte[] content, String line)
         {
-            var separator = (content.Length > 0) && (content[^1] != (Byte)'\n') ? "\n" : String.Empty;
-            return [..content, ..Encoding.UTF8.GetBytes($"{separator}{line}\n")];
+            var newline = content.AsSpan().IndexOf("\r\n"u8) >= 0 ? "\r\n" : "\n";
+            var separator = (content.Length > 0) && (content[^1] != (Byte)'\n') ? newline : String.Empty;
+            return [..content, ..Encoding.UTF8.GetBytes($"{separator}{line}{newline}")];
         }
 
-        private static Boolean Lists(String text, String line) => TextFile.SplitLines(text.Replace("\r\n", "\n")).Any(candidate => candidate.Trim() == line);
+        // AddManaged may already have reported the same problem for a forced .gitignore.
+        private void AddProblem(String problem)
+        {
+            if (!Problems.Contains(problem))
+            {
+                Problems.Add(problem);
+            }
+        }
+
+        private static Boolean Lists(String text, String line) => TextFile.SplitLines(text.Replace("\r\n", "\n")).Any(candidate => candidate.TrimEnd() == line);
 
         private Boolean IsWritable(String path, out String fullPath, out Boolean exists)
         {

@@ -56,7 +56,7 @@ dotnet run tool/sync.cs -- init ~/src/Chaos.Example 1.0.0 \
 | `--force` | Overwrites existing files, except an existing strong-name key |
 | `--ref <git-ref>` | Reads the content of another ref; the manifest still records `<version>`, so `check` needs the same `--ref` until that release is tagged |
 
-`init` never changes an existing file unless `--force` is given. It skips existing files and lists them, and it refuses to run when the target already has a `.repo-baseline.json`. The only exception is the strong-name key of a library: `init` adds its file name to an existing `.gitignore`, so that the key cannot be committed by mistake. The key is never printed. Store it as a CI secret as described in the layout guide.
+`init` never changes an existing file unless `--force` is given. It skips existing files and lists them, and it refuses to run when the target already has a `.repo-baseline.json`. Like `sync`, it exits with `2` and writes nothing when a file it would write has a symbolic link, a directory or a file in its path. The only exception is the strong-name key of a library: `init` adds its file name to an existing `.gitignore`, so that the key cannot be committed by mistake. The key is never printed. Store it as a CI secret as described in the layout guide.
 
 To adopt the baseline in an existing repository, run `init` to add the missing files, then `sync` to update the synced files and blocks that `init` skipped. Add the ReSharper layer injection to an existing `<Name>.slnx.DotSettings` by hand; `check` reports it until then. Review the result and commit it.
 

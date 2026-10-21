@@ -1154,6 +1154,7 @@ expect_status 0
 expect_output ".repo-baseline.json: overwritten"
 expect_output ".github/review.md: blocks merged"
 expect_output "Sample.snk: an existing strong-name key is never replaced"
+expect_no_output "Run sync"
 expect_file README.md '# Sample' '' 'Source: https://github.com/example/Sample'
 expect_file CLAUDE.md 'Read AGENTS.md.'
 expect_file .github/review.md '<!-- BEGIN repo-baseline: review -->' 'Review rules.' '<!-- END repo-baseline: review -->' '' 'Local review.'
@@ -1176,6 +1177,32 @@ run_init 1.0.0 "${LIBRARY_ON_GITHUB[@]}"
 expect_status 0
 grep -qx "  .gitignore" <<< "${OUTPUT}" || fail "expected .gitignore in the list of skipped files"
 expect_file .gitignore 'Sample.snk'
+# Git treats leading spaces as part of the pattern, so such a line does not ignore the key.
+new_empty_target -indented
+write "${TARGET}/.gitignore" '  Sample.snk'
+run_init 1.0.0 "${LIBRARY_ON_GITHUB[@]}"
+expect_status 0
+expect_file .gitignore '  Sample.snk' 'Sample.snk'
+new_empty_target -crlf
+printf 'bin/\r\n' > "${TARGET}/.gitignore"
+run_init 1.0.0 "${LIBRARY_ON_GITHUB[@]}"
+expect_status 0
+cmp -s <(printf 'bin/\r\nSample.snk\r\n') "${TARGET}/.gitignore" || fail "expected the key line to keep the CRLF line endings of .gitignore"
+
+test_case "init: an existing .gitignore with malformed block markers is a problem, and nothing is written"
+new_empty_target
+printf '# BEGIN repo-baseline: gitignore\nobj/\n' > "${TARGET}/.gitignore"
+run_init 1.0.0 "${LIBRARY_ON_GITHUB[@]}"
+expect_status 2
+expect_output "error: .gitignore: block gitignore: BEGIN marker on line 1 has no END marker"
+expect_output "error: init wrote nothing because of the problems above."
+expect_no_file Sample.snk
+expect_no_file .repo-baseline.json
+expect_file .gitignore '# BEGIN repo-baseline: gitignore' 'obj/'
+# --force replaces the file with its template, so the malformed markers no longer matter.
+run_init 1.0.0 "${LIBRARY_ON_GITHUB[@]}" --force
+expect_status 0
+expect_file .gitignore '# BEGIN repo-baseline: gitignore' '/tmp/' '# END repo-baseline: gitignore' '' '.idea/' 'Sample.snk'
 
 test_case "init: a path problem writes nothing"
 new_empty_target
@@ -1234,6 +1261,10 @@ for case in \
     "'http://github.com/example/Sample' is not a valid --repository-url|1.0.0 --name Sample --type library --forge github --repository-url http://github.com/example/Sample --target-frameworks net10.0" \
     "'https://user:secret@github.com/example/Sample' is not a valid --repository-url|1.0.0 --name Sample --type library --forge github --repository-url https://user:secret@github.com/example/Sample --target-frameworks net10.0" \
     "'https://github.com/example/Sample?tab=1' is not a valid --repository-url|1.0.0 --name Sample --type library --forge github --repository-url https://github.com/example/Sample?tab=1 --target-frameworks net10.0" \
+    "'https://github.com/example/a&b' is not a valid --repository-url|1.0.0 --name Sample --type library --forge github --repository-url https://github.com/example/a&b --target-frameworks net10.0" \
+    "'https://GitHub.com/example/Sample' is not a valid --repository-url; write it in its normalized form, https://github.com/example/Sample.|1.0.0 --name Sample --type library --forge github --repository-url https://GitHub.com/example/Sample --target-frameworks net10.0" \
+    "'net08.0' is not a valid target framework|1.0.0 --name Sample --type library --forge github --repository-url ${url} --target-frameworks net8.0;net08.0" \
+    "'CON' is not a valid name; it cannot be used in file names on Windows.|1.0.0 --name CON --type library --forge github --repository-url ${url} --target-frameworks net10.0" \
     "--forge github needs a repository URL on github.com, not gitlab.com.|1.0.0 --name Sample --type library --forge github --repository-url https://gitlab.com/example/Sample --target-frameworks net10.0" \
     "--forge gitlab needs a repository URL on a GitLab host, not github.com.|1.0.0 --name Sample --type library --forge gitlab --repository-url ${url} --target-frameworks net10.0" \
     "'net10' is not a valid target framework|1.0.0 --name Sample --type library --forge github --repository-url ${url} --target-frameworks net10" \
@@ -1248,9 +1279,15 @@ for case in \
     expect_status 2
     expect_output "error: ${case%%|*}"
 done
+run_init 1.0.0 --name Sample --type library --forge github --repository-url $'https://github.com/example/Sample\nEVIL' --target-frameworks net10.0
+expect_status 2
+expect_output "is not a valid --repository-url"
 run_tool_from "${INIT_BASELINE}" sync "${TARGET}" --private
 expect_status 2
 expect_output "Unknown option '--private'."
+run_tool_from "${INIT_BASELINE}" sync "${TARGET}" --name
+expect_status 2
+expect_output "Unknown option '--name'."
 run_tool_from "${INIT_BASELINE}" check "${TARGET}" --name Sample
 expect_status 2
 expect_output "Unknown option '--name'."
