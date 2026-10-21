@@ -1342,7 +1342,8 @@ for type in application library; do
         [ "${type}" = library ] && files+=(./.repo-baseline/Packaging.props ./Sample.Project.snk)
         [ "${forge}" = github ] && files+=(./.github/copilot-instructions.md)
         expect_files "${files[@]}"
-        if grep -rlF '{{' "${TARGET}" --exclude-dir=.git > "${WORK}/unfilled"; then
+        # -I skips binary files such as the random strong-name key, which can contain the bytes {{.
+        if grep -rlIF '{{' "${TARGET}" --exclude-dir=.git > "${WORK}/unfilled"; then
             OUTPUT=$(cat "${WORK}/unfilled")
             fail "expected every placeholder to be filled in"
         fi
