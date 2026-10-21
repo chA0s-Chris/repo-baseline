@@ -1203,6 +1203,13 @@ write "${TARGET}/.gitignore" '# BEGIN repo-baseline: gitignore' 'Sample.snk' '# 
 run_init 1.0.0 "${LIBRARY_ON_GITHUB[@]}"
 expect_status 0
 expect_file .gitignore '# BEGIN repo-baseline: gitignore' 'Sample.snk' '# END repo-baseline: gitignore' 'Sample.snk'
+# A later negation re-includes the key, so the key line is appended again as the last rule.
+new_empty_target -negated
+write "${TARGET}/.gitignore" 'Sample.snk' '!*.snk'
+run_init 1.0.0 "${LIBRARY_ON_GITHUB[@]}"
+expect_status 0
+expect_file .gitignore 'Sample.snk' '!*.snk' 'Sample.snk'
+git -C "${TARGET}" check-ignore --quiet Sample.snk || fail "expected Git to ignore Sample.snk after a negation"
 
 test_case "init: an existing .gitignore with malformed block markers is a problem, and nothing is written"
 new_empty_target

@@ -2312,8 +2312,9 @@ internal static class InitCommand
         }
 
         /// <summary>
-        /// Whether a line outside the managed blocks equals <paramref name="line"/>. A line inside a block does not count,
-        /// because <c>sync</c> replaces the block content.
+        /// Whether a line outside the managed blocks equals <paramref name="line"/> and no negation (<c>!…</c>) follows it.
+        /// A line inside a block does not count, because <c>sync</c> replaces the block content. A later negation may
+        /// re-include the key, so the line is appended again rather than evaluating Git's patterns.
         /// </summary>
         private static Boolean Lists(String text, String line, ManagedFile? managed)
         {
@@ -2324,7 +2325,13 @@ internal static class InitCommand
                 Array.Fill(inBlock, true, block.BeginLine, block.EndLine - block.BeginLine + 1);
             }
 
-            return lines.Where((candidate, index) => !inBlock[index]).Any(candidate => candidate.TrimEnd() == line);
+            var last = lines.Count - 1;
+            while ((last >= 0) && (inBlock[last] || (lines[last].TrimEnd() != line)))
+            {
+                last--;
+            }
+
+            return (last >= 0) && !lines.Skip(last + 1).Any(candidate => candidate.StartsWith('!'));
         }
 
         private Boolean IsWritable(String path, out String fullPath, out Boolean exists)
