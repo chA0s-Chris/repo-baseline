@@ -266,8 +266,11 @@ expect_no_call
 
 echo
 if [ "${FAILURES}" -eq 0 ]; then
+    # A passing run leaves nothing behind. Every fixture is a Git repository, which IDEs pick up as a VCS root.
+    cd "${ROOT}"
+    rm -rf "${WORK}"
     echo "All ${TESTS} tests passed."
 else
-    echo "${FAILURES} check(s) failed in ${TESTS} tests."
+    echo "${FAILURES} check(s) failed in ${TESTS} tests. The test repositories are kept in ${WORK}."
     exit 1
 fi
