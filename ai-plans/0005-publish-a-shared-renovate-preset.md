@@ -10,12 +10,12 @@ The goal is to publish the shared rules once, so each repository keeps only its 
 
 ## Acceptance Criteria
 
-- [ ] `renovate/default.json` (new) contains exactly the shared rules listed in Technical Details.
-- [ ] `renovate-config-validator` passes for `renovate/default.json`, and its pinned command is listed under Local Development Commands in `AGENTS.md`.
-- [ ] In scratch clones of Chaos.Mongo and ShadowDrop, the resolved repository configuration of a `renovate.json` reduced to the preset plus its local rules matches that of the current one, apart from the intended differences listed in Technical Details.
-- [ ] The README explains how to reference the preset, that it follows `main`, and that Renovate on a GitLab instance needs a GitHub token (`RENOVATE_GITHUB_COM_TOKEN` or a `github.com` host rule) to read it.
-- [ ] `docs/design.md` ("Renovate preset") states what the preset contains and that repositories follow `main`, and `AGENTS.md` no longer says the preset does not exist.
-- [ ] `docs/decisions.md` records the preset as a new Confirmed decision TOOL-5: what it contains and what stays local, that repositories follow `main`, and why `ignorePaths` drops `**/tests/**`.
+- [x] `renovate/default.json` (new) contains exactly the shared rules listed in Technical Details.
+- [x] `renovate-config-validator` passes for `renovate/default.json`, and its pinned command is listed under Local Development Commands in `AGENTS.md`.
+- [x] In scratch clones of Chaos.Mongo and ShadowDrop, the resolved repository configuration of a `renovate.json` reduced to the preset plus its local rules matches that of the current one, apart from the intended differences listed in Technical Details.
+- [x] The README explains how to reference the preset, that it follows `main`, and that Renovate on a GitLab instance needs a GitHub token (`RENOVATE_GITHUB_COM_TOKEN` or a `github.com` host rule) to read it.
+- [x] `docs/design.md` ("Renovate preset") states what the preset contains and that repositories follow `main`, and `AGENTS.md` no longer says the preset does not exist.
+- [x] `docs/decisions.md` records the preset as a new Confirmed decision TOOL-5: what it contains and what stays local, that repositories follow `main`, and why `ignorePaths` drops `**/tests/**`.
 
 ## Technical Details
 
@@ -39,6 +39,7 @@ Intended differences against the current resolved configurations:
 - The group names are unified, so open grouped pull requests get new branch names.
 - Chaos.Mongo gains the GitHub Actions group and loses its `skip-changelog` label. Both release-drafter configurations already exclude pull requests with the `renovate` label.
 - In Chaos.Mongo, the test SDK group gains the two `Microsoft.Testing` packages.
+- A repository without its own top-level `description` shows the preset's description; it documents the preset and has no effect on updates.
 
 Repositories follow the default branch, so the `renovate.json` template stays unchanged. The file is created once, so `sync` could not keep a pinned tag current. A breaking change to the preset would get a new preset path instead.
 

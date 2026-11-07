@@ -16,8 +16,7 @@ The project is in its design phase. Read `docs/design.md` before changing anythi
 | `tool/sync.cs` | The tool: a single-file C# app with the `init`, `sync` and `check` commands, described under "Tool" in `docs/design.md` |
 | `tests/scripts/` | Tests for the shared code-style scripts |
 | `tests/tool/` | Tests for the tool |
-
-The Renovate preset (`renovate/default.json`) does not exist yet.
+| `renovate/default.json` | The shared Renovate preset, described under "Renovate preset" in `docs/design.md` |
 
 ## Local Development Commands
 
@@ -27,10 +26,13 @@ The Renovate preset (`renovate/default.json`) does not exist yet.
 | Test the tool | `bash tests/tool/run.sh` |
 | Set up a repository | `dotnet run tool/sync.cs -- init <path> <version> --name <Name> --type application\|library --forge github\|gitlab --repository-url <url> --target-frameworks <tfm>[;<tfm>…]`, optionally with `--private`, `--force` and `--ref <git-ref>` |
 | Sync or check a repository | `dotnet run tool/sync.cs -- sync <path>` or `… check <path>`, optionally with `--ref <git-ref>` |
+| Validate the Renovate preset | `npx --yes --package renovate@44.181.5 -- renovate-config-validator --strict --no-global renovate/default.json` |
 
 The script tests need bash, Git and `jq`. They run the scripts against a stub `dotnet`, so they cover argument handling, file selection and report filtering, but not ReSharper itself.
 
 The tool needs Git and the .NET 10 SDK or later; its tests also need bash. The tests build fixture `repo-baseline` repositories with their own profiles and templates under `tmp/`, so changes to the real profiles do not affect them. Run the tool from this repository, not from inside the target repository.
+
+The preset validator needs Node.js; `npx` downloads the pinned Renovate version. Keep `--no-global`, which validates the file as repository configuration instead of self-hosted configuration.
 
 ## Rules for This Repository
 

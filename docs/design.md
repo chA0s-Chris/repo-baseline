@@ -181,7 +181,11 @@ Package versions stay in the repository's `Directory.Packages.props`, where Reno
 
 ### Renovate preset
 
-Shared Renovate rules are published as a preset in this repository (`renovate/default.json`). Repositories reference it with `"extends": ["github>chA0s-Chris/repo-baseline//renovate/default"]` instead of copying rules. Renovate on GitLab instances needs a GitHub token to read the preset.
+Shared Renovate rules are published as a preset in this repository (`renovate/default.json`). Repositories reference it with `"extends": ["github>chA0s-Chris/repo-baseline//renovate/default"]` in the created-once `renovate.json` instead of copying rules.
+
+The preset contains `config:recommended`, Dependency Dashboard approval for major updates, the `renovate` label, an `ignorePaths` list without `**/tests/**`, the NuGet range strategy, the FluentAssertions hold (TST-1) and groups for NUnit, the test SDK and GitHub Actions. Custom managers, version holds and other repository-specific rules stay in the repository's `renovate.json` (TOOL-5).
+
+Unlike synced content, the preset is not pinned to a release: the reference has no version, so repositories follow `main`. A breaking change gets a new preset path. Renovate on GitLab instances needs a GitHub token to read the preset.
 
 ## Rules for synced content
 

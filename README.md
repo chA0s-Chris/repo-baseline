@@ -87,6 +87,23 @@ dotnet run tool/sync.cs -- check "${GITHUB_WORKSPACE}"
 
 On GitLab CI, clone into a new directory from `mktemp -d` instead of `${RUNNER_TEMP}/repo-baseline`, because `/tmp` can outlive a job on shell executors, and use `${CI_PROJECT_DIR}` instead of `${GITHUB_WORKSPACE}`. The snippet reads the version with `jq`, which `inspect_code.sh` needs as well.
 
+## Renovate Preset
+
+`renovate/default.json` holds the Renovate rules that all repositories share. The `renovate.json` that `init` creates references it:
+
+```json
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["github>chA0s-Chris/repo-baseline//renovate/default"]
+}
+```
+
+Add only local rules next to the reference, such as custom managers and version holds for test images, or further presets. A local `ignorePaths` replaces the preset's list instead of extending it.
+
+The reference has no version, so Renovate reads the preset from `main` and every repository picks up changes to the shared rules on its next run. The preset does not follow the pinned release, because `renovate.json` is created once and `sync` could not keep a pinned reference current. A breaking change gets a new preset path instead.
+
+Renovate on a GitLab instance reads the preset from `github.com` and needs a GitHub token for it: set `RENOVATE_GITHUB_COM_TOKEN`, or add a host rule for `github.com`. The repository is public, so a token without scopes is enough.
+
 ## Documentation
 
 - [Design](docs/design.md): profiles, kinds of content, the manifest, sync mechanisms, the tool and the rollout.
