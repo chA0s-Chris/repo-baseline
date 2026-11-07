@@ -235,6 +235,7 @@ Some existing repositories have a `MyProject.E2E.Tests` project without Aspire; 
 - Scoped cleanup selects the MSBuild and packaging files (`.csproj`, `.slnx`, `.props`, `.targets`, `.nuspec`, `.config`) but not plain `.xml` files, which are often data such as test fixtures.
 - Both use the single `.slnx` file in the repository root instead of a hard-coded name, and fail when there is none or more than one.
 - `inspect_code.sh` reports warnings and errors by default, reads the XML report, and groups findings by project.
+- The report lists a finding once per target framework of a multi-targeted project. `inspect_code.sh` prints it once. When a finding occurs in only some of the frameworks that appear in its project's findings, the line ends with those frameworks, for example `(net8.0)`. The report does not say which frameworks a project targets, so a framework without any finding is unknown.
 - A repository can suppress specific inspection IDs through `inspection.suppressedIds` in `.repo-baseline.json`, for example `CSharpWarnings::CS8618` when a Roslyn diagnostic suppressor already handles it but ReSharper does not run suppressors. Entries are the full `TypeId` as the XML report writes it. `inspect_code.sh` reads the manifest with `jq` and requires it even when nothing is suppressed.
 
 ### TOOL-2: `dotnet format` is not used

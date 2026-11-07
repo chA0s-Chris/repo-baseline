@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Shaped like the XML report of `dotnet jb inspectcode` 2026.2 for multi-targeted projects; findings are made up.
+     inspectcode lists a finding once per target framework; in a measured report, the newest framework came
+     first. Projects with a single target framework carry no TargetFramework attribute. -->
+<Report ToolsVersion="262.0.20260101.0">
+  <Information>
+    <Solution>Sample.slnx</Solution>
+    <InspectionScope>
+      <Element>Solution</Element>
+    </InspectionScope>
+  </Information>
+  <IssueTypes>
+    <IssueType Id="CSharpWarnings::CS8618" Category="Compiler Warnings" CategoryId="CompilerWarnings" Description="Non-nullable member is uninitialized." Severity="WARNING" WikiUrl="https://www.jetbrains.com/help/resharper/CSharpWarnings_CS8618.html" />
+    <IssueType Id="MergeIntoPattern" Category="Language Usage Opportunities" CategoryId="LanguageUsage" Description="Merge into pattern" Severity="WARNING" />
+    <IssueType Id="PossibleNullReferenceException" Category="Potential Code Quality Issues" CategoryId="CodeSmell" Description="Possible 'System.NullReferenceException'" Severity="WARNING" />
+    <IssueType Id="UseCollectionExpression" Category="Language Usage Opportunities" CategoryId="LanguageUsage" Description="Use collection expression" Severity="WARNING" />
+  </IssueTypes>
+  <Issues>
+    <Project Name="Sample.Lib">
+      <Issue TypeId="MergeIntoPattern" Severity="WARNING" File="src/Sample.Lib/Parser.cs" TargetFramework="net10.0" Offset="310-312" Line="12" Message="Merge into pattern" />
+      <Issue TypeId="MergeIntoPattern" Severity="WARNING" File="src/Sample.Lib/Parser.cs" TargetFramework="net9.0" Offset="310-312" Line="12" Message="Merge into pattern" />
+      <Issue TypeId="MergeIntoPattern" Severity="WARNING" File="src/Sample.Lib/Parser.cs" TargetFramework="net8.0" Offset="310-312" Line="12" Message="Merge into pattern" />
+      <Issue TypeId="UseCollectionExpression" Severity="WARNING" File="src/Sample.Lib/Parser.cs" TargetFramework="net10.0" Offset="702-716" Line="30" Message="Use collection expression" />
+      <Issue TypeId="UseCollectionExpression" Severity="WARNING" File="src/Sample.Lib/Parser.cs" TargetFramework="net9.0" Offset="702-716" Line="30" Message="Use collection expression" />
+    </Project>
+    <Project Name="Sample.Compat">
+      <Issue TypeId="CSharpWarnings::CS8618" Severity="WARNING" File="src/Sample.Compat/Shim.cs" TargetFramework="net8.0" Offset="140-146" Line="6" Message="Non-nullable field '_inner' is uninitialized." />
+      <Issue TypeId="PossibleNullReferenceException" Severity="WARNING" File="src/Sample.Compat/Shim.cs" TargetFramework="net10.0" Offset="388-394" Line="15" Message="Possible 'System.NullReferenceException'" />
+      <Issue TypeId="PossibleNullReferenceException" Severity="WARNING" File="src/Sample.Compat/Shim.cs" TargetFramework="net9.0" Offset="388-394" Line="15" Message="Possible 'System.NullReferenceException'" />
+    </Project>
+    <Project Name="Sample.Shared">
+      <Issue TypeId="MergeIntoPattern" Severity="WARNING" File="src/Sample.Shared/Options.cs" TargetFramework="net10.0" Offset="95-97" Line="4" Message="Merge into pattern" />
+      <Issue TypeId="MergeIntoPattern" Severity="WARNING" File="src/Sample.Shared/Options.cs" TargetFramework="net8.0" Offset="95-97" Line="4" Message="Merge into pattern" />
+      <Issue TypeId="MergeIntoPattern" Severity="WARNING" File="src/Sample.Shared/Options.cs" TargetFramework="netstandard2.0" Offset="95-97" Line="4" Message="Merge into pattern" />
+      <Issue TypeId="UseCollectionExpression" Severity="WARNING" File="src/Sample.Shared/Options.cs" TargetFramework="net10.0" Offset="230-241" Line="9" Message="Use collection expression" />
+      <Issue TypeId="UseCollectionExpression" Severity="WARNING" File="src/Sample.Shared/Options.cs" TargetFramework="netstandard2.0" Offset="230-241" Line="9" Message="Use collection expression" />
+    </Project>
+    <Project Name="Sample.Tests">
+      <Issue TypeId="PossibleNullReferenceException" Severity="WARNING" File="tests/Sample.Tests/ParserTests.cs" Offset="512-520" Line="21" Message="Possible 'System.NullReferenceException'" />
+    </Project>
+  </Issues>
+</Report>
