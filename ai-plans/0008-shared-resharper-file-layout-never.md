@@ -10,12 +10,12 @@ The maintainer decided to fix the matching and give test classes a deliberate me
 
 ## Acceptance Criteria
 
-- [ ] In both places in `.repo-baseline/ReSharper.DotSettings`, a method with any one of the `Test`, `TestCase` or `TestCaseSource` attributes is recognized as a test method.
-- [ ] The NUnit pattern orders members as: static fields and constants, fields (both sorted as today), constructors, setup/teardown methods, test methods in written order, all other members in written order, nested types.
-- [ ] Classes without NUnit test methods or fixture attributes still use the unchanged Default Pattern.
-- [ ] `docs/decisions.md` records the test class member order as a new Confirmed decision CS-13, including that adopting repositories apply the reordering in their reformatting commit listed in `.git-blame-ignore-revs`.
-- [ ] With the baseline applied at Chaos.Mongo `1db6f36` and ShadowDrop `73c9184`, `cleanup_code.sh --all` changes the same files as the measured extended variant (50 and 13 files), and every change is a pure move into the specified order.
-- [ ] A comment on #8 summarizes the measurement of all three variants and the decision; it is shown to the maintainer before it is posted.
+- [x] In both places in `.repo-baseline/ReSharper.DotSettings`, a method with any one of the `Test`, `TestCase` or `TestCaseSource` attributes is recognized as a test method.
+- [x] The NUnit pattern orders members as: static fields and constants, fields (both sorted as today), constructors, setup/teardown methods, test methods in written order, all other members in written order, nested types.
+- [x] Classes without NUnit test methods or fixture attributes still use the unchanged Default Pattern.
+- [x] `docs/decisions.md` records the test class member order as a new Confirmed decision CS-13, including that adopting repositories apply the reordering in their reformatting commit listed in `.git-blame-ignore-revs`.
+- [x] With the baseline applied at Chaos.Mongo `1db6f36` and ShadowDrop `73c9184`, `cleanup_code.sh --all` changes the same files as the measured extended variant (50 and 13 files), and every change is a pure move into the specified order.
+- [x] A comment on #8 summarizes the measurement of all three variants and the decision; it is shown to the maintainer before it is posted.
 
 ## Technical Details
 

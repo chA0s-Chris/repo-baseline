@@ -98,6 +98,16 @@ JSON, YAML (`.yml` and `.yaml`), Markdown and the MSBuild and XML files (`.cspro
 
 The `.yaml` extension is listed explicitly because an older glob covered only `.yml`, so files with the longer extension were indented differently from the others.
 
+### CS-13: Member order in NUnit test classes
+
+**Status:** Confirmed
+
+Cleanup orders the members of NUnit test classes as follows: static fields and constants, fields, constructors, setup and teardown methods, test methods, all other members, nested types. Static fields, constants, fields and constructors are sorted as in other classes. Test methods and the other members keep their written order.
+
+A class counts as a test class when it declares a method with `[Test]`, `[TestCase]` or `[TestCaseSource]`. NUnit does not require `[TestFixture]`, and the order does not depend on it. A class that carries `[TestFixture]` or `[TestFixtureSource]` also counts, which covers parameterized fixtures and classes whose tests are all inherited.
+
+A reader sees the state and setup of a test class before its tests, and helpers and test doubles after them. Earlier shared settings never recognized a test method, because their conditions required all three test attributes on the same method. Most test classes therefore used the default order, and test methods were never grouped. Adopting repositories apply the reordering in their reformatting commit, which is listed in `.git-blame-ignore-revs`.
+
 ## Build
 
 ### BLD-1: Warnings are errors in Release builds and CI
