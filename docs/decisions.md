@@ -169,7 +169,7 @@ Every test project references NUnit, NUnit3TestAdapter, NUnit.Analyzers, Microso
 
 The shared set contains no mocking framework. Moq-based mocking is being phased out: new tests use hand-written test doubles, and newer repositories do not reference Moq at all. Repositories that still contain older Moq-based tests reference Moq locally in `tests/Directory.Build.props` until those tests are migrated.
 
-FluentAssertions stays on the latest 7.x release, because version 8 changed to a commercial license. 7.x still receives occasional releases, so the shared Renovate preset allows minor and patch updates but blocks major version 8.
+FluentAssertions stays on the latest 7.x release, because version 8 changed to a commercial license. 7.x still receives occasional releases, so the shared Renovate preset (TOOL-5) allows minor and patch updates but blocks major version 8.
 
 ### TST-2: Shared testing guidelines are deferred
 
@@ -258,6 +258,23 @@ How Rider behaves when shared settings are edited in the IDE, in particular whic
 The shared `.gitignore` block does not mention `.idea/`. `init` adds `.idea/` to the local part of `.gitignore`, so new repositories ignore the directory completely.
 
 Some repositories commit selected Rider files, such as scopes or project settings. Git cannot re-include a file inside an ignored directory, so a shared `.idea/` pattern would make that impossible. Such a repository replaces the local pattern with more specific ones.
+
+### TOOL-5: Shared Renovate preset
+
+**Status:** Confirmed
+
+`renovate/default.json` holds the Renovate rules that every repository shares:
+
+- `config:recommended`, with Dependency Dashboard approval for major updates.
+- The `renovate` label. The preset uses `addLabels` rather than `labels`, so labels that a repository adds itself are kept.
+- `ignorePaths`: Renovate's default list without `**/tests/**`. While that entry is active, custom managers for test images under `tests/` (TST-4) cannot see their files. Re-check the list when `config:recommended` changes its defaults.
+- `rangeStrategy: bump` for NuGet, which restores the old update behavior for bare versions.
+- FluentAssertions stays below version 8 (TST-1).
+- The groups "NUnit" (`NUnit`, `NUnit.Analyzers`, `NUnit3TestAdapter`), "Test SDK" (`Microsoft.NET.Test.Sdk`, `Microsoft.TestPlatform.TestHost`, `Microsoft.Testing.Platform`, `Microsoft.Testing.Extensions.CodeCoverage`) and "GitHub Actions". The Actions group has no effect on GitLab or in repositories without workflows, so it is shared instead of added per repository.
+
+Repository-specific rules stay in the repository's `renovate.json`: custom managers and version holds for test images, Dashboard approval for dependency minimums, and presets such as `helpers:pinGitHubActionDigests`.
+
+Repositories reference the preset without a version and follow `main`. `renovate.json` is created once, so `sync` could not keep a pinned tag current, and a forgotten pin would keep old rules without notice. A breaking change to the preset gets a new preset path instead of changing `default.json`.
 
 ### AGT-1: Agents report notes instead of editing `AGENTS.md`
 

@@ -1,0 +1,67 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "description": [
+    "Shared Renovate rules of repo-baseline. Repositories add only their local rules.",
+    "ignorePaths mirrors the config:recommended defaults but drops **/tests/**.",
+    "Custom managers cannot see files under tests/ while that entry is active,",
+    "which would silently disable the pinned test-image managers of the repositories.",
+    "Re-check this list when config:recommended changes its own defaults."
+  ],
+  "extends": [
+    "config:recommended"
+  ],
+  "addLabels": [
+    "renovate"
+  ],
+  "major": {
+    "dependencyDashboardApproval": true
+  },
+  "ignorePaths": [
+    "**/node_modules/**",
+    "**/bower_components/**",
+    "**/vendor/**",
+    "**/examples/**",
+    "**/__tests__/**",
+    "**/test/**",
+    "**/__fixtures__/**"
+  ],
+  "packageRules": [
+    {
+      "description": "Restore old NuGet update behavior for bare versions",
+      "matchManagers": [
+        "nuget"
+      ],
+      "rangeStrategy": "bump"
+    },
+    {
+      "description": "Allow FluentAssertions updates within v7 only",
+      "matchPackageNames": [
+        "FluentAssertions"
+      ],
+      "allowedVersions": "<8"
+    },
+    {
+      "groupName": "NUnit",
+      "matchPackageNames": [
+        "NUnit",
+        "NUnit.Analyzers",
+        "NUnit3TestAdapter"
+      ]
+    },
+    {
+      "groupName": "Test SDK",
+      "matchPackageNames": [
+        "Microsoft.NET.Test.Sdk",
+        "Microsoft.TestPlatform.TestHost",
+        "Microsoft.Testing.Platform",
+        "Microsoft.Testing.Extensions.CodeCoverage"
+      ]
+    },
+    {
+      "groupName": "GitHub Actions",
+      "matchManagers": [
+        "github-actions"
+      ]
+    }
+  ]
+}
