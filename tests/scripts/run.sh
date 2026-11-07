@@ -84,6 +84,10 @@ expect_output() {
     grep -qF -- "$1" <<< "${OUTPUT}" || fail "expected output to contain: $1"
 }
 
+expect_output_once() {
+    [ "$(grep -cxF -- "$1" <<< "${OUTPUT}")" -eq 1 ] || fail "expected output to contain this line exactly once: $1"
+}
+
 expect_no_output() {
     if grep -qF -- "$1" <<< "${OUTPUT}"; then fail "expected output not to contain: $1"; fi
 }
@@ -225,6 +229,35 @@ echo '{ "version": "1.0.0", "profiles": ["common", "dotnet"], "inspection": { "s
 run ./inspect_code.sh --all
 expect_status 0
 expect_output "Project Sample.Web"
+
+test_case "inspect: prints a finding of several target frameworks once"
+new_repo Sample.slnx
+export STUB_REPORT="${FIXTURES}/report-multi-target.xml"
+run ./inspect_code.sh --all
+expect_status 0
+expect_output_once "      src/Sample.Lib/Parser.cs:12 Merge into pattern"
+expect_no_output "Merge into pattern ("
+expect_output_once "      tests/Sample.Tests/ParserTests.cs:21 Possible 'System.NullReferenceException'"
+expect_no_output "ParserTests.cs:21 Possible 'System.NullReferenceException' ("
+
+test_case "inspect: names the target frameworks of a finding missing from some"
+new_repo Sample.slnx
+export STUB_REPORT="${FIXTURES}/report-multi-target.xml"
+run ./inspect_code.sh --all
+expect_status 0
+expect_output_once "      src/Sample.Lib/Parser.cs:30 Use collection expression (net9.0, net10.0)"
+expect_output_once "      src/Sample.Compat/Shim.cs:6 Non-nullable field '_inner' is uninitialized. (net8.0)"
+expect_output_once "      src/Sample.Compat/Shim.cs:15 Possible 'System.NullReferenceException' (net9.0, net10.0)"
+expect_output_once "      src/Sample.Shared/Options.cs:9 Use collection expression (net10.0, netstandard2.0)"
+
+test_case "inspect: a suppressed finding still counts for the target frameworks of its project"
+new_repo Sample.slnx
+export STUB_REPORT="${FIXTURES}/report-multi-target.xml"
+echo '{ "version": "1.0.0", "profiles": ["common", "dotnet"], "inspection": { "suppressedIds": ["CSharpWarnings::CS8618"] } }' > .repo-baseline.json
+run ./inspect_code.sh --all
+expect_status 0
+expect_no_output "is uninitialized"
+expect_output_once "      src/Sample.Compat/Shim.cs:15 Possible 'System.NullReferenceException' (net9.0, net10.0)"
 
 test_case "inspect: rejects an invalid suppression list"
 new_repo Sample.slnx

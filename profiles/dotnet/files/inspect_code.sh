@@ -203,6 +203,19 @@ FINDINGS=$(SUPPRESSED_IDS="${SUPPRESSED_IDS}" awk '
         return text
     }
 
+    # Orders target frameworks by version, oldest first: netX.Y names compare numerically, so net9.0
+    # comes before net10.0, and every other name, such as netstandard2.0, follows them sorted by name.
+    function framework_before(a, b,    a_version, b_version, a_parts, b_parts) {
+        a_version = (a ~ /^net[0-9]+\.[0-9]+$/)
+        b_version = (b ~ /^net[0-9]+\.[0-9]+$/)
+        if (a_version != b_version) return a_version
+        if (!a_version) return a < b
+        split(substr(a, 4), a_parts, ".")
+        split(substr(b, 4), b_parts, ".")
+        if (a_parts[1] + 0 != b_parts[1] + 0) return a_parts[1] + 0 < b_parts[1] + 0
+        return a_parts[2] + 0 < b_parts[2] + 0
+    }
+
     BEGIN {
         count = split(ENVIRON["SUPPRESSED_IDS"], ids, "\n")
         for (i = 1; i <= count; i++) {
@@ -210,25 +223,72 @@ FINDINGS=$(SUPPRESSED_IDS="${SUPPRESSED_IDS}" awk '
         }
     }
 
+    # split() empties an array portably; `delete array` is not available in every awk.
     /^[[:space:]]*<Project / {
         project = unescape(attr($0, "Name"))
-        entries = ""
+        finding_count = 0
+        project_framework_count = 0
+        split("", finding_index)
+        split("", finding_text)
+        split("", finding_framework_count)
+        split("", finding_frameworks)
+        split("", finding_has_framework)
+        split("", project_has_framework)
         next
     }
 
+    # inspectcode reports a finding once per target framework of a multi-targeted project. Such copies
+    # differ only in their TargetFramework attribute, so they are printed as one finding.
     /^[[:space:]]*<Issue / {
-        if (unescape(attr($0, "TypeId")) in suppressed) next
+        framework = attr($0, "TargetFramework")
+        # The frameworks of the project are collected before suppression, so suppressing one inspection
+        # does not change how the other findings are labeled.
+        if (framework != "" && !(framework in project_has_framework)) {
+            project_has_framework[framework] = 1
+            project_framework_count++
+        }
+        type_id = unescape(attr($0, "TypeId"))
+        if (type_id in suppressed) next
         file = unescape(attr($0, "File"))
         line = attr($0, "Line")
         message = unescape(attr($0, "Message"))
-        # A finding without a line number belongs to the file as a whole.
-        entries = entries sprintf("      %s%s %s\n", file, (line == "" ? "" : ":" line), message)
+        key = type_id SUBSEP file SUBSEP attr($0, "Offset") SUBSEP message
+        if (!(key in finding_index)) {
+            finding_index[key] = ++finding_count
+            # A finding without a line number belongs to the file as a whole.
+            finding_text[finding_count] = sprintf("      %s%s %s", file, (line == "" ? "" : ":" line), message)
+            finding_framework_count[finding_count] = 0
+        }
+        n = finding_index[key]
+        if (framework != "" && !((n, framework) in finding_has_framework)) {
+            finding_has_framework[n, framework] = 1
+            finding_frameworks[n, ++finding_framework_count[n]] = framework
+        }
         next
     }
 
     # A project without findings, or with suppressed findings only, must not leave a heading behind.
     /^[[:space:]]*<\/Project>/ {
-        if (entries != "") printf "    Project %s\n%s", project, entries
+        if (finding_count == 0) next
+        printf "    Project %s\n", project
+        for (n = 1; n <= finding_count; n++) {
+            text = finding_text[n]
+            frameworks = finding_framework_count[n]
+            # Only a finding missing from some frameworks of the project names the ones it occurs in.
+            if (frameworks > 0 && frameworks < project_framework_count) {
+                for (i = 2; i <= frameworks; i++) {
+                    current = finding_frameworks[n, i]
+                    for (j = i - 1; j >= 1 && framework_before(current, finding_frameworks[n, j]); j--) {
+                        finding_frameworks[n, j + 1] = finding_frameworks[n, j]
+                    }
+                    finding_frameworks[n, j + 1] = current
+                }
+                suffix = finding_frameworks[n, 1]
+                for (i = 2; i <= frameworks; i++) suffix = suffix ", " finding_frameworks[n, i]
+                text = text " (" suffix ")"
+            }
+            print text
+        }
         next
     }
 ' "${REPORT_FILE}")

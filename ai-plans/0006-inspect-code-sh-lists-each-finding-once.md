@@ -10,11 +10,11 @@ The goal is to print each finding once and to name the target frameworks only wh
 
 ## Acceptance Criteria
 
-- [ ] A finding that the report lists for several target frameworks of a project appears once in the output of `inspect_code.sh`.
-- [ ] A finding listed for only some of its project's target frameworks ends with those frameworks, for example `(net8.0)` or `(net8.0, net9.0)`.
-- [ ] Findings without a `TargetFramework` attribute, suppression through `inspection.suppressedIds` and grouping by project behave as before, and the existing script tests pass unchanged.
-- [ ] The script tests in `tests/scripts/` cover both cases with a new fixture report whose findings carry `TargetFramework` attributes.
-- [ ] TOOL-1 in `docs/decisions.md` states that each finding is printed once and when target frameworks are named.
+- [x] A finding that the report lists for several target frameworks of a project appears once in the output of `inspect_code.sh`.
+- [x] A finding listed for only some of its project's target frameworks ends with those frameworks, for example `(net8.0)` or `(net8.0, net9.0)`.
+- [x] Findings without a `TargetFramework` attribute, suppression through `inspection.suppressedIds` and grouping by project behave as before, and the existing script tests pass unchanged.
+- [x] The script tests in `tests/scripts/` cover both cases with a new fixture report whose findings carry `TargetFramework` attributes.
+- [x] TOOL-1 in `docs/decisions.md` states that each finding is printed once and when target frameworks are named.
 
 ## Technical Details
 
