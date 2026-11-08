@@ -48,6 +48,8 @@ Nullability bugs are cheap to prevent at compile time and expensive to find at r
 
 The line length limit is 180, set as `max_line_length = 180` for `*.{cs,razor}` in `.editorconfig`. ReSharper reads it as its wrap limit (`WRAP_LIMIT`), so the ReSharper settings do not set it again. The most recently maintained repositories use 180; 160 is an older value.
 
+The MSBuild and XML files (`.csproj`, `.slnx`, `.props`, `.config`, `.targets`, `.nuspec`, `.xml`) use the same limit, set in their own `.editorconfig` section. Without it, ReSharper wraps their attributes at its default of 120 characters, and the first full cleanup of an adopting repository rewrites MSBuild files whose lines are longer.
+
 ### CS-6: Expression-bodied members are permitted, not enforced
 
 **Status:** Confirmed
@@ -107,6 +109,12 @@ Cleanup orders the members of NUnit test classes as follows: static fields and c
 A class counts as a test class when it declares a method with `[Test]`, `[TestCase]` or `[TestCaseSource]`. NUnit does not require `[TestFixture]`, and the order does not depend on it. A class that carries `[TestFixture]` or `[TestFixtureSource]` also counts, which covers parameterized fixtures and classes whose tests are all inherited.
 
 A reader sees the state and setup of a test class before its tests, and helpers and test doubles after them. Earlier shared settings never recognized a test method, because their conditions required all three test attributes on the same method. Most test classes therefore used the default order, and test methods were never grouped. Adopting repositories apply the reordering in their reformatting commit, which is listed in `.git-blame-ignore-revs`.
+
+### CS-14: Cleanup inserts no blank line after the XML declaration
+
+**Status:** Confirmed
+
+Cleanup does not insert a blank line after the XML declaration (`<?xml …?>`) in the MSBuild and XML files: the `.editorconfig` section for these files sets `xml_blank_line_after_pi = false`, while ReSharper's default inserts one. The templates write the declaration directly above the root element. A blank line that a file already has stays, so files in either form are unchanged.
 
 ## Build
 
