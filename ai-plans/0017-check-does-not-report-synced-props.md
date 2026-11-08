@@ -10,12 +10,12 @@ The goal is that `check` reports a synced `.props` file that the build file name
 
 ## Acceptance Criteria
 
-- [ ] `check` reports each synced `.props` file that its importing file does not import: `Directory.Build.props` for `.repo-baseline/Common.props`, `tests/Directory.Build.props` for `.repo-baseline/Tests.props`, and `src/Directory.Build.props` for `.repo-baseline/Packaging.props`.
-- [ ] A missing importing file is reported in the same way as a missing import, and an importing file that is not valid XML is reported as not valid XML.
-- [ ] `check` reports no finding for a repository that `init` creates from the real profiles.
-- [ ] The tool tests cover a missing import, an import written with slashes and one written with backslashes, a missing importing file, and an importing file that is not valid XML.
-- [ ] The "MSBuild imports" section of `docs/design.md` and the `check` row of the README's command table describe the new check.
-- [ ] The README's adoption paragraph says that existing `Directory.Build.props` files need the imports added by hand and that `check` reports them until then.
+- [x] `check` reports each synced `.props` file that its importing file does not import: `Directory.Build.props` for `.repo-baseline/Common.props`, `tests/Directory.Build.props` for `.repo-baseline/Tests.props`, and `src/Directory.Build.props` for `.repo-baseline/Packaging.props`.
+- [x] A missing importing file is reported in the same way as a missing import, and an importing file that is not valid XML is reported as not valid XML.
+- [x] `check` reports no finding for a repository that `init` creates from the real profiles.
+- [x] The tool tests cover a missing import, an import written with slashes and one written with backslashes, a missing importing file, and an importing file that is not valid XML.
+- [x] The "MSBuild imports" section of `docs/design.md` and the `check` row of the README's command table describe the new check.
+- [x] The README's adoption paragraph says that existing `Directory.Build.props` files need the imports added by hand and that `check` reports them until then.
 
 ## Technical Details
 

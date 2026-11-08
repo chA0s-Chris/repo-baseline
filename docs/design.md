@@ -177,6 +177,8 @@ Strong-name signing is not part of `Packaging.props`, because the key file name 
 
 The repository's own `Directory.Build.props` files are created once and stay local. They hold target frameworks and everything repository-specific, and they can override shared properties after the import.
 
+`check` verifies that each build file in the table above imports its synced file, because a synced file that nothing imports silently does not apply. A file counts as imported when an `Import` element's `Project` attribute ends with the synced path, ignoring case and with backslashes read as slashes; MSBuild expressions and conditions are not evaluated. A missing build file is reported like a missing import.
+
 Package versions stay in the repository's `Directory.Packages.props`, where Renovate keeps them current. `check` verifies that every package referenced by a synced `.props` file has a `PackageVersion` entry there.
 
 ### Renovate preset
@@ -202,7 +204,7 @@ The tool is a single-file C# app (`tool/sync.cs`, run with `dotnet run`) with th
 |---|---|
 | `init` | Creates the manifest, writes synced content, copies the created-once templates with their placeholders filled in, which creates the ReSharper layer injection, and generates a strong-name key for `dotnet-nuget` repositories. Skips existing files and lists them; `--force` overwrites them, except an existing strong-name key. |
 | `sync` | Updates synced content to the version in the manifest, or to a version given on the command line, which is then recorded in the manifest. Removes blocks that no selected profile defines. Writes nothing if a block target file has malformed block markers, if a file the selected profiles use is not valid UTF-8, or if such a file has a symbolic link, a directory or a file in its path where the tool needs a regular file. |
-| `check` | Exits non-zero if synced content differs from the pinned release, if a managed block is missing, unknown or malformed, if a synced file is not a regular file inside the repository or a managed file is not valid UTF-8, if the local ReSharper file does not inject the shared layer or redefines shared keys, or if a package from a synced `.props` file has no version. |
+| `check` | Exits non-zero if synced content differs from the pinned release, if a managed block is missing, unknown or malformed, if a synced file is not a regular file inside the repository or a managed file is not valid UTF-8, if the local ReSharper file does not inject the shared layer or redefines shared keys, if a build file does not import its synced `.props` file, or if a package from a synced `.props` file has no version. |
 
 All three commands exit with `0` on success, `1` when `check` has findings, and `2` on usage, manifest and source errors and when `init` or `sync` refuses to write. The README shows how to run them.
 
@@ -226,7 +228,7 @@ A placeholder on a line of its own takes the line's indentation for every line o
 
 `init` writes nothing while any target path has a problem of the kind that stops `sync`. An existing `.repo-baseline.json` stops it unless `--force` is given. Otherwise it never changes an existing file without `--force`, with one exception: for `dotnet-nuget`, it adds the key's file name to an existing `.gitignore` that does not list it yet, so that the key cannot be committed by mistake. The key is never printed, and on Unix it is readable only by its owner.
 
-**Adopting an existing repository:** run `init` to add the missing files, then `sync` to update the synced files and blocks that `init` skipped. An existing `<Name>.slnx.DotSettings` does not get the layer injection automatically; `check` reports it until it is added by hand.
+**Adopting an existing repository:** run `init` to add the missing files, then `sync` to update the synced files and blocks that `init` skipped. An existing `<Name>.slnx.DotSettings` does not get the layer injection automatically, and existing `Directory.Build.props` files do not get the imports of the synced `.props` files; `check` reports both until they are added by hand.
 
 ### Versions and distribution
 

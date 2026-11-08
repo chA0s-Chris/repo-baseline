@@ -1577,9 +1577,18 @@ internal static class CheckCommand
     private const String InjectedLayersPrefix = "/Default/Environment/InjectedLayers/";
     private const String InjectionPath = @"..\.repo-baseline\ReSharper.DotSettings";
     private const String CentralPackageFile = "Directory.Packages.props";
+
     private static readonly XNamespace Xaml = "http://schemas.microsoft.com/winfx/2006/xaml";
     private static readonly XNamespace Wpf = "http://schemas.microsoft.com/winfx/2006/xaml/presentation";
     private static readonly Regex InjectionKey = new(@"^/Default/Environment/InjectedLayers/FileInjectedLayer/=(?<guid>[^/]+)/RelativePath/@EntryValue\z");
+
+    // Each synced .props file and the repository's own build file that imports it, as in the layout guide.
+    private static readonly (String Synced, String ImportedBy)[] Imports =
+    [
+        (".repo-baseline/Common.props", "Directory.Build.props"),
+        (".repo-baseline/Tests.props", "tests/Directory.Build.props"),
+        (".repo-baseline/Packaging.props", "src/Directory.Build.props")
+    ];
 
     public static Int32 Run(String target, ExpectedContent expected)
     {
@@ -1595,6 +1604,7 @@ internal static class CheckCommand
         }
 
         CheckReSharperSettings(target, expected, findings);
+        CheckImports(target, expected, findings);
         CheckPackageVersions(target, expected, findings);
 
         foreach (var finding in findings)
@@ -1795,11 +1805,29 @@ internal static class CheckCommand
         }
     }
 
+    private static void CheckImports(String target, ExpectedContent expected, List<String> findings)
+    {
+        foreach (var (synced, importedBy) in Imports.Where(import => expected.Files.Any(file => file.Path == import.Synced)))
+        {
+            // MSBuild expressions are not evaluated: any Import whose path ends with the synced file counts.
+            var path = Path.Combine(target, importedBy);
+            var projects = File.Exists(path) ? ReadAttributes(File.ReadAllBytes(path), "Import", "Project") : [];
+            if (projects is null)
+            {
+                findings.Add($"{importedBy}: not valid XML");
+            }
+            else if (!projects.Any(project => project.Replace('\\', '/').EndsWith(synced, StringComparison.OrdinalIgnoreCase)))
+            {
+                findings.Add($"{importedBy}: does not import {synced}");
+            }
+        }
+    }
+
     private static void CheckPackageVersions(String target, ExpectedContent expected, List<String> findings)
     {
         var references = expected.Files
                                  .Where(file => file.Path.EndsWith(".props", StringComparison.OrdinalIgnoreCase))
-                                 .SelectMany(file => (ReadItems(file.Content, "PackageReference")
+                                 .SelectMany(file => (ReadAttributes(file.Content, "PackageReference", "Include")
                                                       ?? throw new ToolException($"{expected.Label}: {file.Path} is not valid XML."))
                                                      .Select(package => (File: file.Path, Package: package)))
                                  .ToList();
@@ -1812,7 +1840,7 @@ internal static class CheckCommand
         var versions = new HashSet<String>(StringComparer.OrdinalIgnoreCase);
         if (File.Exists(centralPath))
         {
-            var items = ReadItems(File.ReadAllBytes(centralPath), "PackageVersion");
+            var items = ReadAttributes(File.ReadAllBytes(centralPath), "PackageVersion", "Include");
             if (items is null)
             {
                 findings.Add($"{CentralPackageFile}: not valid XML");
@@ -1827,7 +1855,7 @@ internal static class CheckCommand
                           .Select(reference => $"{reference.File}: package {reference.Package}: no PackageVersion in {CentralPackageFile}"));
     }
 
-    private static List<String>? ReadItems(Byte[] content, String itemName)
+    private static List<String>? ReadAttributes(Byte[] content, String elementName, String attributeName)
     {
         try
         {
@@ -1838,10 +1866,10 @@ internal static class CheckCommand
 
             return XDocument.Parse(text)
                             .Descendants()
-                            .Where(element => element.Name.LocalName == itemName)
-                            .Select(element => (String?)element.Attribute("Include"))
+                            .Where(element => element.Name.LocalName == elementName)
+                            .Select(element => (String?)element.Attribute(attributeName))
                             .OfType<String>()
-                            .Where(include => include.Length > 0)
+                            .Where(value => value.Length > 0)
                             .ToList();
         }
         catch (XmlException)
