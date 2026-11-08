@@ -397,6 +397,7 @@ test_case "check: ReSharper settings must inject the shared layer and not redefi
 new_target '["net"]'
 run_tool sync "${TARGET}"
 touch "${TARGET}/Sample.slnx"
+write "${TARGET}/tests/Directory.Build.props" '<Project>' '  <Import Project="../.repo-baseline/Tests.props" />' '</Project>'
 write "${TARGET}/Directory.Packages.props" '<Project>' '  <ItemGroup>' '    <PackageVersion Include="nunit" Version="4.0.0" />' \
     '    <PackageVersion Include="FluentAssertions" Version="7.0.0" />' '  </ItemGroup>' '</Project>'
 xmlns='xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:s="clr-namespace:System;assembly=mscorlib" xmlns:wpf="http://schemas.microsoft.com/winfx/2006/xaml/presentation"'
@@ -434,22 +435,23 @@ write "${TARGET}/Sample.slnx.DotSettings" "<wpf:ResourceDictionary xml:space=\"p
     '</wpf:ResourceDictionary>'
 run_tool check "${TARGET}"
 expect_status 0
-cp "${TARGET}/Sample.slnx.DotSettings" "${WORK}/settings-${TESTS}"
+# Later tests reuse these settings, which inject the shared layer correctly.
+cp "${TARGET}/Sample.slnx.DotSettings" "${WORK}/valid-settings"
 printf '<!-- \xE4 -->\n' >> "${TARGET}/Sample.slnx.DotSettings"
 run_tool check "${TARGET}"
 expect_status 1
 expect_output "Sample.slnx.DotSettings: not valid XML"
-sed -e 's/wpf:ResourceDictionary/Settings/g' "${WORK}/settings-${TESTS}" > "${TARGET}/Sample.slnx.DotSettings"
+sed -e 's/wpf:ResourceDictionary/Settings/g' "${WORK}/valid-settings" > "${TARGET}/Sample.slnx.DotSettings"
 run_tool check "${TARGET}"
 expect_status 1
 expect_output "Sample.slnx.DotSettings: has no wpf:ResourceDictionary root"
-cp "${WORK}/settings-${TESTS}" "${TARGET}/Sample.slnx.DotSettings"
+cp "${WORK}/valid-settings" "${TARGET}/Sample.slnx.DotSettings"
 
 test_case "check: every package of a synced .props file needs a PackageVersion"
 new_target '["net"]'
 run_tool sync "${TARGET}"
 touch "${TARGET}/Sample.slnx"
-cp "${WORK}/target-$((TESTS - 1))/Sample.slnx.DotSettings" "${TARGET}/"
+cp "${WORK}/valid-settings" "${TARGET}/Sample.slnx.DotSettings"
 run_tool check "${TARGET}"
 expect_status 1
 expect_output ".repo-baseline/Tests.props: package NUnit: no PackageVersion in Directory.Packages.props"
@@ -464,6 +466,36 @@ printf '<!-- \xE4 -->\n' >> "${TARGET}/Directory.Packages.props"
 run_tool check "${TARGET}"
 expect_status 1
 expect_output "Directory.Packages.props: not valid XML"
+
+test_case "check: every synced .props file needs an import in its build file"
+new_target '["net"]'
+run_tool sync "${TARGET}"
+touch "${TARGET}/Sample.slnx"
+cp "${WORK}/valid-settings" "${TARGET}/Sample.slnx.DotSettings"
+write "${TARGET}/Directory.Packages.props" '<Project>' '  <ItemGroup>' '    <PackageVersion Include="NUnit" Version="4.0.0" />' \
+    '    <PackageVersion Include="FluentAssertions" Version="7.0.0" />' '  </ItemGroup>' '</Project>'
+run_tool check "${TARGET}"
+expect_status 1
+expect_output "tests/Directory.Build.props: does not import .repo-baseline/Tests.props"
+expect_no_output "Common.props"
+expect_no_output "Packaging.props"
+write "${TARGET}/tests/Directory.Build.props" '<Project>' '  <!-- <Import Project="../.repo-baseline/Tests.props" /> -->' \
+    '  <Import Project="../.repo-baseline/Common.props" />' '</Project>'
+run_tool check "${TARGET}"
+expect_status 1
+expect_output "tests/Directory.Build.props: does not import .repo-baseline/Tests.props"
+write "${TARGET}/tests/Directory.Build.props" '<Project>' '  <ImportGroup>' \
+    '    <Import Project="$(MSBuildThisFileDirectory)../.repo-baseline/Tests.props" />' '  </ImportGroup>' '</Project>'
+run_tool check "${TARGET}"
+expect_status 0
+write "${TARGET}/tests/Directory.Build.props" '<Project>' '  <Import Project="$(MSBuildThisFileDirectory)..\.Repo-Baseline\Tests.props" />' '</Project>'
+run_tool check "${TARGET}"
+expect_status 0
+printf '<!-- \xE4 -->\n' >> "${TARGET}/tests/Directory.Build.props"
+run_tool check "${TARGET}"
+expect_status 1
+expect_output "tests/Directory.Build.props: not valid XML"
+expect_no_output "does not import"
 
 test_case "sync: sets and clears only the executable bit"
 new_target '["base"]'
@@ -970,10 +1002,13 @@ build_init_baseline() {
         '    <PackageVersion Include="NUnit" Version="4.0.0" />' '  </ItemGroup>' '</Project>'
     write "${profiles}/dotnet/templates/src/Directory.Build.props" '<Project>' '  <PropertyGroup>' '    <Packable>false</Packable>' \
         '  </PropertyGroup>' '  {{SourceLinkGitLabHost}}' '</Project>'
+    write "${profiles}/dotnet/templates/tests/Directory.Build.props" '<Project>' \
+        '  <Import Project="$(MSBuildThisFileDirectory)../.repo-baseline/Tests.props" />' '</Project>'
 
     write "${profiles}/dotnet-nuget/profile.json" '{ "blocks": [] }'
     write "${profiles}/dotnet-nuget/files/.repo-baseline/Packaging.props" '<Project />'
-    write "${profiles}/dotnet-nuget/templates/src/Directory.Build.props" '<Project>' '  <PropertyGroup>' '    <Packable>true</Packable>' \
+    write "${profiles}/dotnet-nuget/templates/src/Directory.Build.props" '<Project>' \
+        '  <Import Project="$(MSBuildThisFileDirectory)../.repo-baseline/Packaging.props" />' '  <PropertyGroup>' '    <Packable>true</Packable>' \
         '    <PackageProjectUrl>{{RepositoryUrl}}</PackageProjectUrl>' '  </PropertyGroup>' '  {{SourceLinkGitLabHost}}' '</Project>'
 
     write "${profiles}/github/profile.json" '{' '  "blocks": [' \
@@ -1066,7 +1101,8 @@ expect_file Sample.slnx '<Solution>' '</Solution>'
 expect_file Directory.Build.props '<Project>' '  <PropertyGroup>' '    <LatestTarget>net10.0</LatestTarget>' \
     '    <MainTargets>$(LatestTarget);net9.0;net8.0</MainTargets>' '    <TargetFrameworks>$(MainTargets)</TargetFrameworks>' \
     '  </PropertyGroup>' '</Project>'
-expect_file src/Directory.Build.props '<Project>' '  <PropertyGroup>' '    <Packable>true</Packable>' \
+expect_file src/Directory.Build.props '<Project>' '  <Import Project="$(MSBuildThisFileDirectory)../.repo-baseline/Packaging.props" />' \
+    '  <PropertyGroup>' '    <Packable>true</Packable>' \
     '    <PackageProjectUrl>https://github.com/example/Sample</PackageProjectUrl>' '  </PropertyGroup>' '</Project>'
 expect_file .github/review.md '<!-- BEGIN repo-baseline: review -->' 'Review rules.' '<!-- END repo-baseline: review -->'
 expect_executable cleanup.sh
@@ -1118,7 +1154,7 @@ for type in application library; do
         expect_status 0
         files=(./.editorconfig ./.gitignore ./.repo-baseline.json ./.repo-baseline/ReSharper.DotSettings ./.repo-baseline/Tests.props ./AGENTS.md
             ./CLAUDE.md ./Directory.Build.props ./Directory.Packages.props ./LICENSE ./README.md ./Sample.slnx ./Sample.slnx.DotSettings
-            ./cleanup.sh ./src/Directory.Build.props)
+            ./cleanup.sh ./src/Directory.Build.props ./tests/Directory.Build.props)
         [ "${type}" = library ] && files+=(./.repo-baseline/Packaging.props ./Sample.snk)
         [ "${forge}" = github ] && files+=(./.github/review.md)
         expect_files "${files[@]}"
