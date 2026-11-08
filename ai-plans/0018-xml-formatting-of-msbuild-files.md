@@ -10,9 +10,9 @@ The goal is that the shared settings decide both, so that cleanup leaves XML fil
 
 ## Acceptance Criteria
 
-- [ ] The XML section of the shared `.editorconfig` block sets `max_line_length = 180` and `xml_blank_line_after_pi = false`.
-- [ ] CS-5 in `docs/decisions.md` covers the line length of the XML file types as well as C#, and a new decision CS-14 records that no blank line follows the XML declaration.
-- [ ] Cleanup with the shared `Zorn` profile leaves an XML file unchanged when it already follows these settings, verified on the five files the pilot's cleanup changed and on the profile's `nuget.config` and `coverlet.xml` templates.
+- [x] The XML section of the shared `.editorconfig` block sets `max_line_length = 180` and `xml_blank_line_after_pi = false`.
+- [x] CS-5 in `docs/decisions.md` covers the line length of the XML file types as well as C#, and a new decision CS-14 records that cleanup inserts no blank line after the XML declaration.
+- [x] Cleanup with the shared `Zorn` profile leaves an XML file unchanged when it already follows these settings, verified on the five files the pilot's cleanup changed and on the profile's `nuget.config` and `coverlet.xml` templates.
 
 ## Technical Details
 
@@ -24,6 +24,6 @@ A test with the ReSharper CLI 2026.2.4 on Chaos.Mongo at `60a57c33`, the commit 
 - Each key is needed: `max_line_length` alone still added the blank line, and `xml_blank_line_after_pi` alone still wrapped two lines.
 - With both keys, cleanup keeps an existing blank line after the declaration and keeps attributes that are already wrapped. Repositories that already have either see no churn.
 
-The script tests run against a stub `dotnet` and cannot cover ReSharper, so the third criterion is verified by hand with the ReSharper CLI, the same way. Cleanup only processes files that belong to the solution, and the `.slnx` that `init` creates is empty, so the `nuget.config` and `coverlet.xml` templates are copied over the files of the same name in the Chaos.Mongo clone, whose solution lists both. The longest line of `coverlet.xml` has 133 characters, so it would wrap at ReSharper's default of 120. Rider's own formatting of XML files is not verified; `cleanup_code.sh` is the authority (TOOL-1).
+The script tests run against a stub `dotnet` and cannot cover ReSharper, so the third criterion is verified by hand with the ReSharper CLI, the same way. Cleanup only processes files that belong to the solution, and the `.slnx` that `init` creates is empty, so the `nuget.config` and `coverlet.xml` templates are copied over the files of the same name in the Chaos.Mongo clone, whose solution lists both. Under the old settings, cleanup added the blank line to both templates. Rider's own formatting of XML files is not verified; `cleanup_code.sh` is the authority (TOOL-1).
 
 The `.editorconfig` block is synced content, so adopting repositories receive the change with `sync` once they pin the next release (`v0.2.0`).
