@@ -27,6 +27,7 @@ The code style is configured in `.editorconfig` and `.repo-baseline/ReSharper.Do
 - Use string interpolation (`$"Hello {name}"`) over string concatenation
 - Use `nameof()` when referencing parameters, properties, or methods
 - Always use parentheses for clarity in expressions
+- Explicit casts may stay even when redundant, for example a widening cast of every operand in `checked` arithmetic
 - Name an argument at the call site when the value alone does not convey its meaning, as a boolean literal rarely does (`Apply(migration, commit: false)`). The `Zorn` cleanup profile keeps `ArrangeArgumentsStyle` off, so cleanup preserves these names instead of rewriting them to positional form
 
 ### Documentation
@@ -69,6 +70,11 @@ The code style is configured in `.editorconfig` and `.repo-baseline/ReSharper.Do
 - Use `throw;` to rethrow exceptions without losing stack trace
 - Use `ArgumentNullException.ThrowIfNull()` for null checks
 - Use `String.IsNullOrEmpty()` for string validation
+
+### Suppressing Inspections
+- Suppress a finding only where this file or a repository rule allows it, and give the reason in a comment
+- Suppress with `// ReSharper disable once <InspectionId>` directly above the statement
+- `disable once` covers only the first finding of that inspection in the statement. When a statement has several, for example a lambda that captures two disposed variables, put `// ReSharper disable <InspectionId>` above the statement and `// ReSharper restore <InspectionId>` below it
 
 ### Nullability
 

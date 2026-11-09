@@ -68,9 +68,9 @@ All `csharp_style_expression_bodied_*` options keep their preferred value but us
 
 - Parentheses use `always_for_clarity` for all operator groups.
 - The cleanup profile does not enable `RemoveRedundantParentheses`.
-- Redundant default argument values, anonymous type property names, method type arguments and parentheses are reported at suggestion level only.
+- Redundant default argument values, anonymous type property names, method type arguments, parentheses and casts are reported at suggestion level only. The cleanup profile does not remove them.
 
-Explicit syntax can make code easier to read even when the compiler does not need it.
+Explicit syntax can make code easier to read even when the compiler does not need it, for example a widening cast of every operand in `checked` arithmetic.
 
 ### CS-9: Usings are sorted alphabetically without groups
 
