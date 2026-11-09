@@ -2,7 +2,7 @@
 
 `repo-baseline` is the single source of truth for files that many repositories share: code style and formatter settings, agent instructions, helper scripts, common build properties, and the templates and description of the standard repository layout. A small tool copies this content into repositories and checks that it stays unchanged there.
 
-The project is in its design phase. Read `docs/design.md` before changing anything; it describes profiles, the kinds of content, the manifest, the sync mechanisms and the tool.
+Read `docs/design.md` before changing anything; it describes profiles, the kinds of content, the manifest, the sync mechanisms and the tool. Repositories pin releases of this content, so a change reaches them only through a new release and their next `sync`.
 
 ## Project Structure
 

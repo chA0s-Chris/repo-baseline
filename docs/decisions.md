@@ -68,9 +68,9 @@ All `csharp_style_expression_bodied_*` options keep their preferred value but us
 
 - Parentheses use `always_for_clarity` for all operator groups.
 - The cleanup profile does not enable `RemoveRedundantParentheses`.
-- Redundant default argument values, anonymous type property names, method type arguments and parentheses are reported at suggestion level only.
+- Redundant default argument values, anonymous type property names, method type arguments, parentheses and casts are reported at suggestion level only. The cleanup profile does not remove them.
 
-Explicit syntax can make code easier to read even when the compiler does not need it.
+Explicit syntax can make code easier to read even when the compiler does not need it, for example a widening cast of every operand in `checked` arithmetic.
 
 ### CS-9: Usings are sorted alphabetically without groups
 
@@ -258,7 +258,14 @@ Some existing repositories have a `MyProject.E2E.Tests` project without Aspire; 
 
 The shared ReSharper settings are a separate synced file that each solution injects as a settings layer. Every repository keeps its `<Name>.slnx.DotSettings` under the default name, so ReSharper and Rider find it without configuration. That file holds only the layer injection and local settings.
 
-How Rider behaves when shared settings are edited in the IDE, in particular which layer it saves to, is verified during the pilot. The README then documents the editing workflow.
+The pilot verified how Rider handles the layer (Rider 2026.2.4.1 on Linux):
+
+- Rider loads the injected file as a child of the solution's team-shared layer. The `RelativePath` form with backslashes works on Linux.
+- Rider saves every change to the solution's own `<Name>.slnx.DotSettings`, never to the injected file. A changed option adds its key there. An edit of the `Zorn` cleanup profile copies the whole profile, which is a single key, into the local file. A save can also add keys that were not changed, such as an empty `/Default/CustomTools/CustomToolsData/@EntryValue`, and a UTF-8 BOM.
+- Neither opening nor saving writes `IsMigratorApplied` keys.
+- `check` reports a copied shared key as a redefined shared key. It does not report keys that the shared file does not define.
+
+Shared settings are therefore changed in `repo-baseline`, not in the IDE. The README describes how to move a change made in the IDE into `repo-baseline`.
 
 ### TOOL-4: Ignoring `.idea/` is a local decision
 

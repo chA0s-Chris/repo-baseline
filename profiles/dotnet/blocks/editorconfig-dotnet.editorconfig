@@ -185,3 +185,4 @@ resharper_redundant_argument_default_value_highlighting = suggestion
 resharper_redundant_anonymous_type_property_name_highlighting = suggestion
 resharper_redundant_type_arguments_of_method_highlighting = suggestion
 resharper_arrange_redundant_parentheses_highlighting = suggestion
+resharper_redundant_cast_highlighting = suggestion
