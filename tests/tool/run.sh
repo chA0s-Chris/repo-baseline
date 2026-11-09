@@ -497,6 +497,50 @@ expect_status 1
 expect_output "tests/Directory.Build.props: not valid XML"
 expect_no_output "does not import"
 
+test_case "check and sync: a synced file or block target in another case is found and renamed"
+new_target '["base"]'
+write "${TARGET}/docs/guide.md" 'Guide v1.'
+write "${TARGET}/TOOL.sh" 'echo old'
+write "${TARGET}/agents.md" '# Local'
+run_tool check "${TARGET}"
+expect_status 1
+expect_output "docs/GUIDE.md: exists only as docs/guide.md"
+expect_output "tool.sh: exists only as TOOL.sh"
+expect_output "AGENTS.md: exists only as agents.md"
+expect_no_output "AGENTS.md: block"
+run_tool sync "${TARGET}"
+expect_status 0
+expect_output "docs/GUIDE.md: renamed from docs/guide.md"
+expect_output "tool.sh: updated, renamed from TOOL.sh"
+expect_output "AGENTS.md: updated, renamed from agents.md"
+expect_no_file docs/guide.md
+expect_no_file TOOL.sh
+expect_no_file agents.md
+expect_file docs/GUIDE.md 'Guide v1.'
+expect_file tool.sh '#!/bin/bash' 'echo tool'
+expect_executable tool.sh
+expect_file AGENTS.md '# Local' '' '<!-- BEGIN repo-baseline: rules -->' '## Rules' '' 'Rules v1.' '<!-- END repo-baseline: rules -->' '' \
+    '<!-- BEGIN repo-baseline: notes -->' '## Notes' '' 'Report notes.' '<!-- END repo-baseline: notes -->'
+run_tool check "${TARGET}"
+expect_status 0
+
+test_case "check and sync: several case variants, and problems in a variant, name the files found"
+new_target '["base"]'
+write "${TARGET}/docs/guide.md" 'One.'
+write "${TARGET}/docs/Guide.md" 'Two.'
+write "${TARGET}/agents.md" '<!-- BEGIN repo-baseline: rules -->'
+run_tool check "${TARGET}"
+expect_status 1
+expect_output "docs/GUIDE.md: exists only as docs/Guide.md and docs/guide.md"
+run_tool sync "${TARGET}"
+expect_status 2
+expect_output "error: docs/GUIDE.md: docs/Guide.md and docs/guide.md differ from it only in case, so it is unclear which one to replace"
+expect_output "error: agents.md: block rules: BEGIN marker on line 1 has no END marker"
+expect_output "sync wrote nothing because of the problems above."
+expect_no_file tool.sh
+expect_file docs/guide.md 'One.'
+expect_file docs/Guide.md 'Two.'
+
 test_case "sync: sets and clears only the executable bit"
 new_target '["base"]'
 run_tool sync "${TARGET}"
@@ -1000,6 +1044,7 @@ build_init_baseline() {
         '  </PropertyGroup>' '</Project>'
     write "${profiles}/dotnet/templates/Directory.Packages.props" '<Project>' '  <ItemGroup>' \
         '    <PackageVersion Include="NUnit" Version="4.0.0" />' '  </ItemGroup>' '</Project>'
+    write "${profiles}/dotnet/templates/nuget.config" '<configuration />'
     write "${profiles}/dotnet/templates/src/Directory.Build.props" '<Project>' '  <PropertyGroup>' '    <Packable>false</Packable>' \
         '  </PropertyGroup>' '  {{SourceLinkGitLabHost}}' '</Project>'
     write "${profiles}/dotnet/templates/tests/Directory.Build.props" '<Project>' \
@@ -1154,7 +1199,7 @@ for type in application library; do
         expect_status 0
         files=(./.editorconfig ./.gitignore ./.repo-baseline.json ./.repo-baseline/ReSharper.DotSettings ./.repo-baseline/Tests.props ./AGENTS.md
             ./CLAUDE.md ./Directory.Build.props ./Directory.Packages.props ./LICENSE ./README.md ./Sample.slnx ./Sample.slnx.DotSettings
-            ./cleanup.sh ./src/Directory.Build.props ./tests/Directory.Build.props)
+            ./cleanup.sh ./nuget.config ./src/Directory.Build.props ./tests/Directory.Build.props)
         [ "${type}" = library ] && files+=(./.repo-baseline/Packaging.props ./Sample.snk)
         [ "${forge}" = github ] && files+=(./.github/review.md)
         expect_files "${files[@]}"
@@ -1181,7 +1226,7 @@ write "${TARGET}/AGENTS.md" '# Local'
 write "${TARGET}/.github/review.md" 'Local review.'
 run_init 1.0.0 "${LIBRARY_ON_GITHUB[@]}"
 expect_status 0
-expect_output "Skipped existing files; --force overwrites them, except a strong-name key:"
+expect_output "Skipped existing files; --force overwrites them, except a strong-name key and names with several case variants:"
 for skipped in README.md CLAUDE.md AGENTS.md .github/review.md; do
     grep -qx "  ${skipped}" <<< "${OUTPUT}" || fail "expected ${skipped} in the list of skipped files"
 done
@@ -1206,6 +1251,84 @@ expect_file .github/review.md '<!-- BEGIN repo-baseline: review -->' 'Review rul
 cmp -s "${WORK}/key-before" "${TARGET}/Sample.snk" || fail "expected --force to keep the existing key"
 run_tool_from "${INIT_BASELINE}" check "${TARGET}"
 expect_status 0
+
+test_case "init: a file whose name differs only in case is the existing file; --force renames it"
+new_empty_target
+write "${TARGET}/NuGet.config" '<configuration>local</configuration>'
+write "${TARGET}/.github/Review.md" 'Local review.'
+run_init 1.0.0 "${LIBRARY_ON_GITHUB[@]}"
+expect_status 0
+for skipped in "nuget.config: exists as NuGet.config" ".github/review.md: exists as .github/Review.md"; do
+    grep -qx "  ${skipped}" <<< "${OUTPUT}" || fail "expected '${skipped}' in the list of skipped files"
+done
+expect_no_file nuget.config
+expect_no_file .github/review.md
+expect_file NuGet.config '<configuration>local</configuration>'
+run_init 1.0.0 "${LIBRARY_ON_GITHUB[@]}" --force
+expect_status 0
+expect_output "nuget.config: overwritten, renamed from NuGet.config"
+expect_output ".github/review.md: blocks merged, renamed from .github/Review.md"
+expect_no_file NuGet.config
+expect_no_file .github/Review.md
+expect_file nuget.config '<configuration />'
+expect_file .github/review.md '<!-- BEGIN repo-baseline: review -->' 'Review rules.' '<!-- END repo-baseline: review -->' '' 'Local review.'
+run_tool_from "${INIT_BASELINE}" check "${TARGET}"
+expect_status 0
+# A file with exactly the name takes precedence over its case variants.
+new_empty_target -exact
+write "${TARGET}/nuget.config" '<configuration>exact</configuration>'
+write "${TARGET}/NuGet.config" '<configuration>variant</configuration>'
+run_init 1.0.0 "${LIBRARY_ON_GITHUB[@]}"
+expect_status 0
+grep -qx "  nuget.config" <<< "${OUTPUT}" || fail "expected nuget.config in the list of skipped files"
+run_init 1.0.0 "${LIBRARY_ON_GITHUB[@]}" --force
+expect_status 0
+expect_output "nuget.config: overwritten"
+expect_no_output "renamed from"
+expect_file nuget.config '<configuration />'
+expect_file NuGet.config '<configuration>variant</configuration>'
+# Without a file of exactly the name, several case variants leave it unclear which one to replace.
+new_empty_target -several
+write "${TARGET}/NuGet.config" '<configuration>one</configuration>'
+write "${TARGET}/NuGet.Config" '<configuration>two</configuration>'
+run_init 1.0.0 "${LIBRARY_ON_GITHUB[@]}"
+expect_status 0
+grep -qx "  nuget.config: exists as NuGet.Config and NuGet.config" <<< "${OUTPUT}" \
+    || fail "expected both case variants in the list of skipped files"
+rm "${TARGET}/.repo-baseline.json"
+run_init 1.0.0 "${LIBRARY_ON_GITHUB[@]}" --force
+expect_status 2
+expect_output "error: nuget.config: NuGet.Config and NuGet.config differ from it only in case, so it is unclear which one to replace"
+expect_output "error: init wrote nothing because of the problems above."
+expect_no_file .repo-baseline.json
+expect_file NuGet.config '<configuration>one</configuration>'
+expect_file NuGet.Config '<configuration>two</configuration>'
+# A case variant is a write target, so it gets the same path checks.
+new_empty_target -link
+ln -s "${WORK}/elsewhere.config" "${TARGET}/NuGet.config"
+run_init 1.0.0 "${LIBRARY_ON_GITHUB[@]}" --force
+expect_status 2
+expect_output "error: NuGet.config: is a symbolic link; synced files must be regular files inside the repository"
+expect_no_file .repo-baseline.json
+# Problems in a case variant name the file that was read.
+new_empty_target -markers
+write "${TARGET}/.github/Review.md" '<!-- BEGIN repo-baseline: review -->'
+run_init 1.0.0 "${LIBRARY_ON_GITHUB[@]}" --force
+expect_status 2
+expect_output "error: .github/Review.md: block review: BEGIN marker on line 1 has no END marker"
+# The key can only be added to .gitignore itself, which Git reads by its exact name.
+new_empty_target -gitignore
+write "${TARGET}/.GitIgnore" 'bin/'
+run_init 1.0.0 "${LIBRARY_ON_GITHUB[@]}"
+expect_status 2
+expect_output "error: .gitignore: exists as .GitIgnore, so Sample.snk cannot be added to it; rename it to .gitignore"
+expect_no_file Sample.snk
+run_init 1.0.0 "${LIBRARY_ON_GITHUB[@]}" --force
+expect_status 0
+expect_output ".gitignore: overwritten, renamed from .GitIgnore"
+expect_no_file .GitIgnore
+expect_file .gitignore '# BEGIN repo-baseline: gitignore' '/tmp/' '# END repo-baseline: gitignore' '' '.idea/' 'Sample.snk'
+git -C "${TARGET}" check-ignore --quiet Sample.snk || fail "expected Git to ignore Sample.snk"
 
 test_case "init: adds the key to an existing .gitignore once"
 new_empty_target
