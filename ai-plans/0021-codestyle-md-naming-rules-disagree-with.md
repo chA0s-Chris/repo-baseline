@@ -12,10 +12,10 @@ The goal is that `CODESTYLE.md` describes what the shared settings enforce, and 
 
 ## Acceptance Criteria
 
-- [ ] The naming lines of `CODESTYLE.md` match the shared naming rules: `_camelCase` for private instance fields, readonly or not; `PascalCase` without a prefix for private static fields, static readonly fields and constant fields; `camelCase` for local variables, local constants and parameters.
-- [ ] No two naming lines of `CODESTYLE.md` contradict each other.
-- [ ] `.repo-baseline/ReSharper.DotSettings` contains no `PredefinedNamingRules` entries.
-- [ ] `inspect_code.sh` with the shared settings reports no `InconsistentNaming` for a sample class that follows every naming line of `CODESTYLE.md`, and reports one for a private static field that is not readonly and is named `_camelCase`. The results are the same before and after the `PredefinedNamingRules` entries are removed.
+- [x] The naming lines of `CODESTYLE.md` match the shared naming rules: `_camelCase` for private instance fields, readonly or not; `PascalCase` without a prefix for private static fields, static readonly fields and constant fields; `camelCase` for local variables, local constants and parameters.
+- [x] No two naming lines of `CODESTYLE.md` contradict each other.
+- [x] `.repo-baseline/ReSharper.DotSettings` contains no `PredefinedNamingRules` entries.
+- [x] `inspect_code.sh` with the shared settings reports no `InconsistentNaming` for a sample class that follows every naming line of `CODESTYLE.md`, and reports one for a private static field that is not readonly and is named `_camelCase`. The results are the same before and after the `PredefinedNamingRules` entries are removed.
 
 ## Technical Details
 
