@@ -159,7 +159,7 @@ ReSharper settings cannot be split into blocks, but ReSharper can load additiona
 
 The path is relative to the settings file itself, so it starts with `..\` although both files are in the repository root; ReSharper on Linux accepts the backslashes. When the path points to a missing file, ReSharper creates an empty one instead of reporting an error, and the shared settings silently do not apply. `check` therefore verifies that the injection points to `.repo-baseline/ReSharper.DotSettings`.
 
-`check` reports every key from the shared layer that the local file redefines, apart from the injection entries themselves. An existing repository contains such a duplicate: its cleanup profile exists in both the injected file and the solution's own file, and the two copies differ. Most likely an edit in the IDE was saved to the solution's own file. The pilot verifies which layer Rider saves to (TOOL-3); the README then explains how to edit shared settings, or how to move such a change into `repo-baseline`.
+`check` reports every key from the shared layer that the local file redefines, apart from the injection entries themselves. An existing repository contains such a duplicate: its cleanup profile exists in both the injected file and the solution's own file, and the two copies differ. Rider saves every edit to the solution's own file, never to the injected file (TOOL-3), so an edit of a shared setting in the IDE creates such a duplicate. The README explains how to move such a change into `repo-baseline`.
 
 ### MSBuild imports
 

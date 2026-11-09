@@ -2,8 +2,6 @@
 
 `repo-baseline` keeps the files that many repositories share in one place: code style and formatter settings, agent instructions, helper scripts, common build properties, and the templates and description of a standard repository layout. A small tool copies this content into repositories and checks in CI that it stays unchanged there.
 
-> **Status:** design phase. The design, the decisions, the first profile content and the `init`, `sync` and `check` commands exist. Until `v1.0.0`, anything may change.
-
 ## Why
 
 Shared configuration drifts. Each repository starts as a copy of an older one, and from then on every repository changes its copy on its own. After a while the same rule has three versions, and nobody knows which one is current.
@@ -86,6 +84,18 @@ dotnet run tool/sync.cs -- check "${GITHUB_WORKSPACE}"
 ```
 
 On GitLab CI, clone into a new directory from `mktemp -d` instead of `${RUNNER_TEMP}/repo-baseline`, because `/tmp` can outlive a job on shell executors, and use `${CI_PROJECT_DIR}` instead of `${GITHUB_WORKSPACE}`. The snippet reads the version with `jq`, which `inspect_code.sh` needs as well.
+
+### Editing shared ReSharper settings
+
+Change shared settings in `repo-baseline`, not in the IDE. Rider saves every change to the solution's own `<Name>.slnx.DotSettings`, never to the injected `.repo-baseline/ReSharper.DotSettings`. A shared setting changed in the IDE therefore becomes a local copy of a shared key, and `check` reports it as a redefined shared key. Editing the `Zorn` cleanup profile copies the whole profile into the local file.
+
+To move a change made in the IDE into `repo-baseline`:
+
+1. Copy the changed key from `<Name>.slnx.DotSettings` into `profiles/dotnet/files/.repo-baseline/ReSharper.DotSettings`, replacing the line with the same key, or adding the key when the shared file does not define it yet. Leave out keys that the IDE added without a change, such as an empty `/Default/CustomTools/CustomToolsData/@EntryValue`.
+2. Remove the key from `<Name>.slnx.DotSettings`, so that `check` does not report it as a redefined shared key.
+3. Change `docs/decisions.md` when the setting implements a decision, open a pull request in `repo-baseline`, and `sync` the repositories once the change is released.
+
+Settings that the `.editorconfig` block contains are changed in `profiles/dotnet/blocks/editorconfig-dotnet.editorconfig` instead. A setting that only one repository needs stays in its own `<Name>.slnx.DotSettings`, as long as the shared file does not define its key.
 
 ## Renovate Preset
 
