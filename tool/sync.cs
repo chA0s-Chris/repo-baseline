@@ -1147,6 +1147,37 @@ internal static class TargetPath
 
         return null;
     }
+
+    /// <summary>
+    /// The paths of the entries next to <paramref name="relativePath"/> whose names differ from its name only in case,
+    /// compared by ordinal name so that the result is the same on case-sensitive and case-insensitive file systems.
+    /// Empty when an entry has exactly the name. Only the last path component is compared.
+    /// </summary>
+    public static List<String> CaseVariants(String target, String relativePath)
+    {
+        var separator = relativePath.LastIndexOf('/');
+        var directory = separator < 0 ? String.Empty : relativePath[..separator];
+        var name = relativePath[(separator + 1)..];
+        var fullDirectory = Path.Combine(target, directory);
+        if (!Directory.Exists(fullDirectory))
+        {
+            return [];
+        }
+
+        var matches = Directory.EnumerateFileSystemEntries(fullDirectory)
+                               .Select(entry => Path.GetFileName(entry))
+                               .Where(entry => String.Equals(entry, name, StringComparison.OrdinalIgnoreCase))
+                               .ToList();
+        return matches.Contains(name, StringComparer.Ordinal)
+            ? []
+            : matches.Order(StringComparer.Ordinal).Select(entry => separator < 0 ? entry : $"{directory}/{entry}").ToList();
+    }
+
+    /// <summary>
+    /// The problem when several files differ from <paramref name="relativePath"/> only in case and none has exactly its name.
+    /// </summary>
+    public static String Ambiguous(String relativePath, IReadOnlyList<String> variants) =>
+        $"{relativePath}: {String.Join(" and ", variants)} differ from it only in case, so it is unclear which one to replace";
 }
 
 internal static class FileModes
@@ -1287,7 +1318,10 @@ internal static class SyncCommand
                 continue;
             }
 
-            writes.AddRange(PlanFile(target, file));
+            if (TryFindVariant(target, file.Path, problems, out var variant))
+            {
+                writes.AddRange(PlanFile(target, file, variant));
+            }
         }
 
         foreach (var managed in expected.ManagedFiles)
@@ -1333,9 +1367,19 @@ internal static class SyncCommand
         return ExitCodes.Success;
     }
 
-    private static IEnumerable<PendingWrite> PlanFile(String target, SyncedFile file)
+    private static IEnumerable<PendingWrite> PlanFile(String target, SyncedFile file, String? variant)
     {
         var path = Path.Combine(target, file.Path);
+        if (variant is not null)
+        {
+            var variantPath = Path.Combine(target, variant);
+            var differs = !File.ReadAllBytes(variantPath).AsSpan().SequenceEqual(file.Content);
+            var renamed = $"renamed from {TextFile.Display(variant)}";
+            yield return new PendingWrite(path, differs ? file.Content : null, file.Executable, differs ? $"updated, {renamed}" : renamed,
+                RenamedFrom: variantPath);
+            yield break;
+        }
+
         if (!File.Exists(path))
         {
             yield return new PendingWrite(path, file.Content, file.Executable, "created");
@@ -1365,14 +1409,22 @@ internal static class SyncCommand
             return null;
         }
 
-        var exists = File.Exists(path);
+        if (!TryFindVariant(target, managed.Path, problems, out var variant))
+        {
+            return null;
+        }
 
-        if (!TextFile.TryDecode(exists ? File.ReadAllBytes(path) : [], out var text))
+        // A case variant is read, reported and replaced under the expected name.
+        var shown = variant ?? managed.Path;
+        var readPath = Path.Combine(target, shown);
+        var exists = File.Exists(readPath);
+
+        if (!TextFile.TryDecode(exists ? File.ReadAllBytes(readPath) : [], out var text))
         {
             // Without selected blocks, nothing would be written to it, and it cannot contain blocks in this encoding.
             if (managed.Blocks.Count > 0)
             {
-                problems.Add($"{TextFile.Display(managed.Path)}: not valid UTF-8");
+                problems.Add($"{TextFile.Display(shown)}: not valid UTF-8");
             }
 
             return null;
@@ -1382,19 +1434,54 @@ internal static class SyncCommand
         var fileProblems = parsed.ProblemsFor(managed);
         if (fileProblems.Count > 0)
         {
-            problems.AddRange(fileProblems.Select(problem => $"{TextFile.Display(managed.Path)}: {problem}"));
+            problems.AddRange(fileProblems.Select(problem => $"{TextFile.Display(shown)}: {problem}"));
             return null;
         }
 
         var merged = BlockMerger.Apply(text, parsed, managed);
+        var current = exists && (merged == text);
+        if (variant is not null)
+        {
+            var renamed = $"renamed from {TextFile.Display(variant)}";
+            return new PendingWrite(path, current ? null : Encoding.UTF8.GetBytes(merged), Executable: null, current ? renamed : $"updated, {renamed}",
+                RenamedFrom: readPath);
+        }
 
         // A file whose blocks are already current is left alone, even if it has a BOM or CRLF line endings.
-        if (exists && (merged == text))
+        if (current)
         {
             return null;
         }
 
         return new PendingWrite(path, Encoding.UTF8.GetBytes(merged), Executable: null, exists ? "updated" : "created");
+    }
+
+    /// <summary>
+    /// Finds the one file whose name differs from <paramref name="relativePath"/> only in case, when no file has exactly
+    /// its name. Several such files, or a variant that is not a regular file inside the repository, are a problem.
+    /// </summary>
+    private static Boolean TryFindVariant(String target, String relativePath, List<String> problems, out String? variant)
+    {
+        variant = null;
+        var variants = TargetPath.CaseVariants(target, relativePath);
+        if (variants.Count > 1)
+        {
+            problems.Add(TargetPath.Ambiguous(relativePath, variants));
+            return false;
+        }
+
+        if (variants.Count == 1)
+        {
+            if (TargetPath.Problem(target, variants[0]) is { } problem)
+            {
+                problems.Add(problem);
+                return false;
+            }
+
+            variant = variants[0];
+        }
+
+        return true;
     }
 
     /// <summary>
@@ -1407,11 +1494,24 @@ internal static class SyncCommand
 /// <summary>
 /// A file that <c>sync</c> or <c>init</c> writes once every planned write is known to be possible.
 /// A secret is created only readable and writable by its owner, and never replaces an existing file.
+/// A file whose name differs only in case is renamed to <paramref name="Path"/> before the content is written; writing first
+/// and deleting it afterwards would delete the written file on a case-insensitive file system.
 /// </summary>
-internal sealed record PendingWrite(String Path, Byte[]? Content, Boolean? Executable, String Description, Boolean Secret = false)
+internal sealed record PendingWrite(
+    String Path,
+    Byte[]? Content,
+    Boolean? Executable,
+    String Description,
+    Boolean Secret = false,
+    String? RenamedFrom = null)
 {
     public void Apply()
     {
+        if (RenamedFrom is not null)
+        {
+            File.Move(RenamedFrom, Path);
+        }
+
         if (Content is not null)
         {
             if (System.IO.Path.GetDirectoryName(Path) is { } directory)
@@ -1631,6 +1731,12 @@ internal static class CheckCommand
             return;
         }
 
+        if (TargetPath.CaseVariants(target, file.Path) is { Count: > 0 } variants)
+        {
+            findings.Add(ExistsOnlyAs(file.Path, variants));
+            return;
+        }
+
         var path = Path.Combine(target, file.Path);
         if (!File.Exists(path))
         {
@@ -1664,6 +1770,12 @@ internal static class CheckCommand
         if (TargetPath.Problem(target, managed.Path) is { } problem)
         {
             findings.Add(problem);
+            return;
+        }
+
+        if (TargetPath.CaseVariants(target, managed.Path) is { Count: > 0 } variants)
+        {
+            findings.Add(ExistsOnlyAs(managed.Path, variants));
             return;
         }
 
@@ -1822,6 +1934,10 @@ internal static class CheckCommand
             }
         }
     }
+
+    // TargetPath.CaseVariants compares ordinal names, so a case variant is reported on case-insensitive file systems too.
+    private static String ExistsOnlyAs(String relativePath, IReadOnlyList<String> variants) =>
+        $"{relativePath}: exists only as {String.Join(" and ", variants)}";
 
     private static void CheckPackageVersions(String target, ExpectedContent expected, List<String> findings)
     {
@@ -2043,7 +2159,7 @@ internal static class InitCommand
 
         if (plan.Skipped.Count > 0)
         {
-            Console.WriteLine("Skipped existing files; --force overwrites them, except a strong-name key:");
+            Console.WriteLine("Skipped existing files; --force overwrites them, except a strong-name key and names with several case variants:");
             foreach (var skipped in plan.Skipped)
             {
                 Console.WriteLine($"  {skipped}");
@@ -2197,9 +2313,9 @@ internal static class InitCommand
 
         public void Add(String path, Byte[] content, Boolean executable)
         {
-            if (IsWritable(path, out var fullPath, out var exists))
+            if (IsWritable(path, out var fullPath, out var existingPath))
             {
-                Writes.Add(new PendingWrite(fullPath, content, executable, exists ? "overwritten" : "created"));
+                Writes.Add(Write(fullPath, existingPath, content, executable, existingPath is null ? "created" : "overwritten"));
             }
         }
 
@@ -2208,7 +2324,7 @@ internal static class InitCommand
         /// </summary>
         public void AddManaged(ManagedFile managed, RenderedTemplate? template)
         {
-            if (!IsWritable(managed.Path, out var fullPath, out var exists))
+            if (!IsWritable(managed.Path, out var fullPath, out var existingPath))
             {
                 return;
             }
@@ -2218,13 +2334,13 @@ internal static class InitCommand
             {
                 text = template.Text;
             }
-            else if (!exists)
+            else if (existingPath is null)
             {
                 text = String.Empty;
             }
-            else if (!TextFile.TryDecode(File.ReadAllBytes(fullPath), out text))
+            else if (!TextFile.TryDecode(File.ReadAllBytes(existingPath), out text))
             {
-                Problems.Add($"{TextFile.Display(managed.Path)}: not valid UTF-8");
+                Problems.Add($"{TextFile.Display(Path.GetRelativePath(_target, existingPath))}: not valid UTF-8");
                 return;
             }
 
@@ -2232,12 +2348,13 @@ internal static class InitCommand
             var problems = parsed.ProblemsFor(managed);
             if (problems.Count > 0)
             {
-                Problems.AddRange(problems.Select(problem => $"{TextFile.Display(managed.Path)}: {problem}"));
+                var shown = existingPath is null ? managed.Path : Path.GetRelativePath(_target, existingPath);
+                Problems.AddRange(problems.Select(problem => $"{TextFile.Display(shown)}: {problem}"));
                 return;
             }
 
-            var description = !exists ? "created" : template is not null ? "overwritten" : "blocks merged";
-            Writes.Add(new PendingWrite(fullPath, Encoding.UTF8.GetBytes(BlockMerger.Apply(text, parsed, managed)), template?.Executable, description));
+            var description = existingPath is null ? "created" : template is not null ? "overwritten" : "blocks merged";
+            Writes.Add(Write(fullPath, existingPath, Encoding.UTF8.GetBytes(BlockMerger.Apply(text, parsed, managed)), template?.Executable, description));
         }
 
         /// <summary>
@@ -2283,6 +2400,12 @@ internal static class InitCommand
             if (TargetPath.Problem(_target, GitIgnoreFile) is { } problem)
             {
                 AddProblem(problem);
+                return;
+            }
+
+            if (TargetPath.CaseVariants(_target, GitIgnoreFile) is { Count: > 0 } variants)
+            {
+                AddProblem($"{GitIgnoreFile}: exists as {String.Join(" and ", variants)}, so {keyPath} cannot be added to it; rename it to {GitIgnoreFile}");
                 return;
             }
 
@@ -2362,23 +2485,69 @@ internal static class InitCommand
             return (last >= 0) && !lines.Skip(last + 1).Any(candidate => candidate.StartsWith('!'));
         }
 
-        private Boolean IsWritable(String path, out String fullPath, out Boolean exists)
+        /// <summary>
+        /// Whether <paramref name="path"/> may be written. <paramref name="existingPath"/> is the existing file it replaces:
+        /// the file of that name or, when there is none, the one file whose name differs only in case. Several such files
+        /// are skipped, or with --force a problem, because none of them is clearly the one to replace.
+        /// </summary>
+        private Boolean IsWritable(String path, out String fullPath, out String? existingPath)
         {
             fullPath = Path.Combine(_target, path);
-            exists = File.Exists(fullPath);
+            existingPath = null;
             if (TargetPath.Problem(_target, path) is { } problem)
             {
                 Problems.Add(problem);
                 return false;
             }
 
-            if (exists && !_force)
+            var variants = TargetPath.CaseVariants(_target, path);
+            if (variants.Count > 1)
             {
-                Skipped.Add(path);
+                var names = String.Join(" and ", variants);
+                if (_force)
+                {
+                    Problems.Add(TargetPath.Ambiguous(path, variants));
+                }
+                else
+                {
+                    Skipped.Add($"{path}: exists as {names}");
+                }
+
+                return false;
+            }
+
+            if (variants.Count == 1)
+            {
+                if (TargetPath.Problem(_target, variants[0]) is { } variantProblem)
+                {
+                    Problems.Add(variantProblem);
+                    return false;
+                }
+
+                existingPath = Path.Combine(_target, variants[0]);
+            }
+            else if (File.Exists(fullPath))
+            {
+                existingPath = fullPath;
+            }
+
+            if ((existingPath is not null) && !_force)
+            {
+                Skipped.Add(existingPath == fullPath ? path : $"{path}: exists as {variants[0]}");
                 return false;
             }
 
             return true;
         }
+
+        private PendingWrite Write(String fullPath, String? existingPath, Byte[] content, Boolean? executable, String description) =>
+            (existingPath is null) || (existingPath == fullPath)
+                ? new PendingWrite(fullPath, content, executable, description)
+                : new PendingWrite(
+                    fullPath,
+                    content,
+                    executable,
+                    $"{description}, renamed from {TextFile.Display(Path.GetRelativePath(_target, existingPath))}",
+                    RenamedFrom: existingPath);
     }
 }
