@@ -1,0 +1,44 @@
+name: CI
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+# A new push to a pull request cancels its run that is still in progress; runs on main always finish.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      - name: Check the workflows
+        uses: raven-actions/actionlint@v2
+
+      # The commands below are the ones documented in AGENTS.md.
+      - name: Test the tool
+        run: bash tests/tool/run.sh
+
+      - name: Test the shared code-style scripts
+        run: bash tests/scripts/run.sh
+
+      - name: Validate the Renovate preset and configuration
+        run: npx --yes --package renovate@44.181.5 -- renovate-config-validator --strict --no-global renovate/default.json renovate.json
