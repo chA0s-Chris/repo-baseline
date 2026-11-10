@@ -12,7 +12,7 @@ The goal is that the tool tests start the tool without a build check per call, w
 
 - [x] The tool tests build the entry point once per fixture checkout with `dotnet build tool/sync.cs -o <folder>` and start the built entry point; their expectations do not change.
 - [x] The shallow tag clone test still runs the tool with `dotnet run tool/sync.cs`, as the README's CI snippet does.
-- [ ] On the pull request's CI run, "Test the tool" takes less than 100 s.
+- [x] On the pull request's CI run, "Test the tool" takes less than 100 s.
 
 ## Technical Details
 
