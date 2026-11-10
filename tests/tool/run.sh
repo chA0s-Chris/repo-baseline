@@ -1,5 +1,6 @@
 #!/bin/bash
-# Tests for the tool, run through its entry point tool/sync.cs.
+# Tests for the tool, run through its entry point tool/sync.cs: built once per fixture checkout and started with
+# `dotnet`, and once with `dotnet run tool/sync.cs` as in the README's CI snippet.
 #
 # The tests build a fixture repo-baseline repository under tmp/ with a copy of the tool and fixture
 # profiles, tag releases in it, and run the tool from there against throwaway target repositories. A second
@@ -187,9 +188,36 @@ new_target() {
     write "${TARGET}/.repo-baseline.json" '{' "  \"version\": \"${2:-1.0.0}\"," "  \"profiles\": $1" '}'
 }
 
+# The built entry point of each checkout, so that the tool is built once per checkout and not checked by
+# MSBuild on every call, which `dotnet run` does for an entry point with a project reference. The build keeps
+# the checkout's own tool/sync.cs as the entry point's path, so the tool still finds that checkout.
+declare -A BUILT_TOOLS=()
+
+build_tool() {
+    local checkout="$1" output build_log
+    output="${WORK}/bin/${#BUILT_TOOLS[@]}"
+    if ! build_log=$(cd "${checkout}" && dotnet build tool/sync.cs -o "${output}" 2>&1); then
+        echo "Building the tool in ${checkout} failed:"
+        echo "${build_log}"
+        exit 1
+    fi
+    BUILT_TOOLS["${checkout}"]="${output}/sync.dll"
+}
+
 # Runs the tool from the given repo-baseline checkout, outside the target repository,
 # and records its exit code and combined output in STATUS and OUTPUT.
 run_tool_from() {
+    local checkout="$1"
+    shift
+    [ -n "${BUILT_TOOLS["${checkout}"]-}" ] || build_tool "${checkout}"
+    set +e
+    OUTPUT=$(cd "${checkout}" && dotnet "${BUILT_TOOLS["${checkout}"]}" "$@" 2>&1)
+    STATUS=$?
+    set -e
+}
+
+# Runs the tool with `dotnet run tool/sync.cs`, as the CI snippet in the README does.
+run_tool_with_dotnet_run_from() {
     local checkout="$1"
     shift
     set +e
@@ -985,16 +1013,17 @@ run_tool check "${TARGET}" --ref broken
 expect_status 2
 expect_output "broken: no block marker syntax is defined for notes.txt."
 
-# A smoke test: run from a clone outside the target, the target's build files cannot reach the tool.
+# A smoke test of the README's CI snippet: run with `dotnet run` from a clone outside the target, the target's
+# build files cannot reach the tool.
 test_case "shallow tag clone: syncs and checks a target that has its own Directory.Build.props"
 git clone --quiet --depth 1 --branch v1.1.0 "file://${BASELINE}" "${WORK}/shallow" 2> /dev/null
 new_target '["base", "extra"]' 1.1.0
 write "${TARGET}/Directory.Build.props" 'This would break any build that imports it.'
 write "${TARGET}/global.json" '{ "sdk": { "version": "1.0.0" } }'
-run_tool_from "${WORK}/shallow" sync "${TARGET}"
+run_tool_with_dotnet_run_from "${WORK}/shallow" sync "${TARGET}"
 expect_status 0
 expect_file docs/GUIDE.md 'Guide v2.'
-run_tool_from "${WORK}/shallow" check "${TARGET}"
+run_tool_with_dotnet_run_from "${WORK}/shallow" check "${TARGET}"
 expect_status 0
 
 # The init fixture uses the profile names that init selects: common, dotnet, dotnet-nuget, github and gitlab.
