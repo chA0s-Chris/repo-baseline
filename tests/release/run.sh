@@ -105,6 +105,18 @@ chmod 644 "${FIXTURE}/profiles/common/files/CLAUDE.md"
 cmp -s "${WORK}/first/profiles.tar.gz" "${WORK}/second/profiles.tar.gz" || fail "expected byte-identical archives"
 cmp -s "${WORK}/first/profiles.tar.gz.sha256" "${WORK}/second/profiles.tar.gz.sha256" || fail "expected identical checksum files"
 
+test_case "pack: changes to tracked profiles or the LICENSE are refused, staged or not, and nothing is written"
+write "${FIXTURE}/profiles/common/files/CLAUDE.md" 'Uncommitted.'
+pack 1.2.3 "${WORK}/dirty"
+expect_status 2
+expect_output "error: LICENSE or profiles/ differ from HEAD; commit or stash the changes before packing a release."
+[ -e "${WORK}/dirty" ] && fail "expected nothing to be written for an uncommitted change"
+git -C "${FIXTURE}" add profiles/common/files/CLAUDE.md
+pack 1.2.3 "${WORK}/staged"
+expect_status 2
+[ -e "${WORK}/staged" ] && fail "expected nothing to be written for a staged change"
+git -C "${FIXTURE}" reset --quiet --hard
+
 test_case "pack: an invalid version or missing arguments are usage errors, and nothing is written"
 for version in '' '-1.0' 'v1.0/x' '1.0 beta'; do
     pack "${version}" "${WORK}/invalid"

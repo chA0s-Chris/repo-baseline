@@ -6,7 +6,8 @@
 # Writes <output-directory>/profiles.tar.gz with the tracked files of profiles/, the LICENSE and a generated
 # release.json, and <output-directory>/profiles.tar.gz.sha256 in the format of sha256sum. The archive is
 # deterministic: names are sorted, every entry has the time of the last commit and owner and group 0, modes
-# are 644 or 755, and gzip stores no name or time. Building the same commit twice gives the same bytes.
+# are 644 or 755, and gzip stores no name or time. Building the same commit twice gives the same bytes, so the
+# script refuses to pack when the tracked files of LICENSE or profiles/ differ from HEAD.
 set -euo pipefail
 
 if [ "$#" -ne 2 ]; then
@@ -24,6 +25,13 @@ if ! [[ "${VERSION}" =~ ^[0-9A-Za-z][0-9A-Za-z.+-]*$ ]]; then
 fi
 
 ROOT="$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse --show-toplevel)"
+
+# tar reads the working tree, so uncommitted changes would end up in an archive with the commit's time.
+if ! git -C "${ROOT}" diff --quiet HEAD -- LICENSE profiles; then
+    echo "error: LICENSE or profiles/ differ from HEAD; commit or stash the changes before packing a release." >&2
+    exit 2
+fi
+
 COMMIT_TIME="$(git -C "${ROOT}" log -1 --format=%ct)"
 STAGING="$(mktemp -d)"
 trap 'rm -rf "${STAGING}"' EXIT
