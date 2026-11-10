@@ -17,6 +17,8 @@ Read `docs/design.md` before changing anything; it describes profiles, the kinds
 | `tests/scripts/` | Tests for the shared code-style scripts |
 | `tests/tool/` | Tests for the tool |
 | `renovate/default.json` | The shared Renovate preset, described under "Renovate preset" in `docs/design.md` |
+| `renovate.json` | This repository's own Renovate configuration: the shared preset, limited to GitHub Actions |
+| `.github/workflows/ci.yml` | CI: runs the commands below on pull requests and pushes to `main` |
 
 ## Local Development Commands
 
@@ -26,13 +28,15 @@ Read `docs/design.md` before changing anything; it describes profiles, the kinds
 | Test the tool | `bash tests/tool/run.sh` |
 | Set up a repository | `dotnet run tool/sync.cs -- init <path> <version> --name <Name> --type application\|library --forge github\|gitlab --repository-url <url> --target-frameworks <tfm>[;<tfm>…]`, optionally with `--private`, `--force` and `--ref <git-ref>` |
 | Sync or check a repository | `dotnet run tool/sync.cs -- sync <path>` or `… check <path>`, optionally with `--ref <git-ref>` |
-| Validate the Renovate preset | `npx --yes --package renovate@44.181.5 -- renovate-config-validator --strict --no-global renovate/default.json` |
+| Validate the Renovate preset and configuration | `npx --yes --package renovate@44.181.5 -- renovate-config-validator --strict --no-global renovate/default.json renovate.json` |
 
 The script tests need bash, Git and `jq`. They run the scripts against a stub `dotnet`, so they cover argument handling, file selection and report filtering, but not ReSharper itself.
 
 The tool needs Git and the .NET 10 SDK or later; its tests also need bash. The tests build fixture `repo-baseline` repositories with their own profiles and templates under `tmp/`, so changes to the real profiles do not affect them. Run the tool from this repository, not from inside the target repository.
 
-The preset validator needs Node.js; `npx` downloads the pinned Renovate version. Keep `--no-global`, which validates the file as repository configuration instead of self-hosted configuration.
+The preset validator needs Node.js; `npx` downloads the pinned Renovate version. Keep `--no-global`, which validates the files as repository configuration instead of self-hosted configuration.
+
+CI runs both test suites and the validation with these commands, and checks the workflows with `actionlint`. Keep the workflow and this table in sync.
 
 ## Rules for This Repository
 

@@ -10,12 +10,12 @@ The goal is that every pull request to `main` and every push to `main` runs thes
 
 ## Acceptance Criteria
 
-- [ ] A new workflow, `.github/workflows/ci.yml`, runs on pull requests to `main` and on pushes to `main`.
-- [ ] It runs `bash tests/tool/run.sh`, `bash tests/scripts/run.sh` and the preset validation command from `AGENTS.md`, and fails when any of them fails.
-- [ ] It checks the repository's workflows with `actionlint`.
-- [ ] A new `renovate.json` extends the shared preset and limits Renovate to the `github-actions` manager, so the action tags get update pull requests.
+- [x] A new workflow, `.github/workflows/ci.yml`, runs on pull requests to `main` and on pushes to `main`.
+- [x] It runs `bash tests/tool/run.sh`, `bash tests/scripts/run.sh` and the preset validation command from `AGENTS.md`, and fails when any of them fails.
+- [x] It checks the repository's workflows with `actionlint`.
+- [x] A new `renovate.json` extends the shared preset and limits Renovate to the `github-actions` manager, so the action tags get update pull requests.
 - [ ] The workflow passes on the pull request that adds it.
-- [ ] `AGENTS.md` says that CI runs these commands, and its preset validation command also validates `renovate.json`.
+- [x] `AGENTS.md` says that CI runs these commands, and its preset validation command also validates `renovate.json`.
 
 ## Technical Details
 
