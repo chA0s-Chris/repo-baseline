@@ -1,7 +1,7 @@
 #!/bin/bash
-# Tests for tool/sync.cs.
+# Tests for the tool, run through its entry point tool/sync.cs.
 #
-# The tests build a fixture repo-baseline repository under tmp/ with a copy of tool/sync.cs and fixture
+# The tests build a fixture repo-baseline repository under tmp/ with a copy of the tool and fixture
 # profiles, tag releases in it, and run the tool from there against throwaway target repositories. A second
 # fixture repository has profiles with templates under the names that `init` selects. The fixture profiles
 # are independent of the real ones, so profile changes do not break the tests. The tests need bash, Git and
@@ -28,6 +28,17 @@ write() {
     printf '%s\n' "$@" > "${path}"
 }
 
+# Copies the tool, its entry point and its project, into a fixture checkout. Running the tool builds the
+# project there, so the checkout ignores the build output.
+copy_tool() {
+    local file
+    while IFS= read -r file; do
+        mkdir -p "$1/$(dirname "${file}")"
+        cp "${ROOT}/${file}" "$1/${file}"
+    done < <(cd "${ROOT}" && find tool/sync.cs src/RepoBaseline \( -name bin -o -name obj \) -prune -o -type f -print)
+    write "$1/.gitignore" 'bin/' 'obj/'
+}
+
 commit() {
     git -C "$1" add --all
     git -C "$1" commit --quiet -m "$2"
@@ -44,7 +55,7 @@ build_baseline() {
     git -C "${BASELINE}" init --quiet --initial-branch=main
     git -C "${BASELINE}" config user.email test@example.invalid
     git -C "${BASELINE}" config user.name test
-    cp "${ROOT}/tool/sync.cs" "${BASELINE}/tool/sync.cs"
+    copy_tool "${BASELINE}"
 
     local profiles="${BASELINE}/profiles"
     write "${profiles}/base/profile.json" '{' '  "blocks": [' \
@@ -1004,7 +1015,7 @@ build_init_baseline() {
     git -C "${INIT_BASELINE}" init --quiet --initial-branch=main
     git -C "${INIT_BASELINE}" config user.email test@example.invalid
     git -C "${INIT_BASELINE}" config user.name test
-    cp "${ROOT}/tool/sync.cs" "${INIT_BASELINE}/tool/sync.cs"
+    copy_tool "${INIT_BASELINE}"
 
     local profiles="${INIT_BASELINE}/profiles"
     write "${profiles}/common/profile.json" '{' '  "blocks": [' \
@@ -1481,7 +1492,7 @@ mkdir -p "${REAL_BASELINE}/tool"
 git -C "${REAL_BASELINE}" init --quiet --initial-branch=main
 git -C "${REAL_BASELINE}" config user.email test@example.invalid
 git -C "${REAL_BASELINE}" config user.name test
-cp "${ROOT}/tool/sync.cs" "${REAL_BASELINE}/tool/sync.cs"
+copy_tool "${REAL_BASELINE}"
 cp -R "${ROOT}/profiles" "${REAL_BASELINE}/profiles"
 commit "${REAL_BASELINE}" "real profiles"
 

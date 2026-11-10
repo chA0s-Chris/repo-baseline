@@ -10,12 +10,12 @@ The goal is that the code lives in a project split by concern, with unit tests f
 
 ## Acceptance Criteria
 
-- [ ] The tool's code is in the new project `src/RepoBaseline/RepoBaseline.csproj`, with the root namespace and assembly name `Chaos.RepoBaseline`, split into files by concern: command-line handling and options, manifest, release source and profiles, expected content, block parsing and merging, target paths and file writes, and one file per command.
-- [ ] `tool/sync.cs` only references the project and calls its entry point; `dotnet run tool/sync.cs -- …` behaves as before.
-- [ ] The tool tests pass without changes to their expectations; the fixtures copy the project as well and ignore its build output.
-- [ ] A new unit test project, `tests/RepoBaseline.Tests`, with the assembly name and root namespace `Chaos.RepoBaseline.Tests`, covers block parsing and merging and the case-variant lookup, and CI runs it.
-- [ ] A new `RepoBaseline.slnx` contains both projects.
-- [ ] The README, `AGENTS.md` and `docs/design.md` describe the new structure, and `AGENTS.md` lists the build and unit test command that CI runs.
+- [x] The tool's code is in the new project `src/RepoBaseline/RepoBaseline.csproj`, with the root namespace and assembly name `Chaos.RepoBaseline`, split into files by concern: command-line handling and options, manifest, release source and profiles, expected content, block parsing and merging, target paths and file writes, and one file per command.
+- [x] `tool/sync.cs` only references the project and calls its entry point; `dotnet run tool/sync.cs -- …` behaves as before.
+- [x] The tool tests pass without changes to their expectations; the fixtures copy the project as well and ignore its build output.
+- [x] A new unit test project, `tests/RepoBaseline.Tests`, with the assembly name and root namespace `Chaos.RepoBaseline.Tests`, covers block parsing and merging and the case-variant lookup, and CI runs it.
+- [x] A new `RepoBaseline.slnx` contains both projects.
+- [x] The README, `AGENTS.md` and `docs/design.md` describe the new structure, and `AGENTS.md` lists the build and unit test command that CI runs.
 
 ## Technical Details
 

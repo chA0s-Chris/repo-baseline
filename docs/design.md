@@ -198,7 +198,7 @@ Unlike synced content, the preset is not pinned to a release: the reference has 
 
 ## Tool
 
-The tool is a single-file C# app (`tool/sync.cs`, run with `dotnet run`) with three commands:
+The tool's code is the class library `src/RepoBaseline` (namespace `Chaos.RepoBaseline`). Its entry point is the file-based app `tool/sync.cs`, run with `dotnet run`, which references the project and locates the `repo-baseline` checkout through its own path. The tool has three commands:
 
 | Command | Effect |
 |---|---|

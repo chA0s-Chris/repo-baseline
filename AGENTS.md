@@ -13,9 +13,12 @@ Read `docs/design.md` before changing anything; it describes profiles, the kinds
 | `docs/layout-dotnet.md` | The standard layout of a .NET repository that uses the `dotnet` profile |
 | `ai-plans/` | Guided Coding plans and plan deviation files |
 | `profiles/` | Profile content: one directory per profile with synced files, block fragments and created-once templates, as described under "Profile storage" in `docs/design.md` |
-| `tool/sync.cs` | The tool: a single-file C# app with the `init`, `sync` and `check` commands, described under "Tool" in `docs/design.md` |
+| `src/RepoBaseline/` | The tool's code: a class library with the `init`, `sync` and `check` commands, described under "Tool" in `docs/design.md` |
+| `tool/sync.cs` | The tool's entry point: a file-based app that references `src/RepoBaseline` |
 | `tests/scripts/` | Tests for the shared code-style scripts |
-| `tests/tool/` | Tests for the tool |
+| `tests/tool/` | Tests for the tool, run through its entry point |
+| `tests/RepoBaseline.Tests/` | Unit tests for the tool's code |
+| `RepoBaseline.slnx` | The solution with the tool's project and its unit tests |
 | `renovate/default.json` | The shared Renovate preset, described under "Renovate preset" in `docs/design.md` |
 | `renovate.json` | This repository's own Renovate configuration: the shared preset, limited to GitHub Actions |
 | `.github/workflows/ci.yml` | CI: runs the commands below on pull requests and pushes to `main` |
@@ -24,6 +27,7 @@ Read `docs/design.md` before changing anything; it describes profiles, the kinds
 
 | Purpose | Command |
 | --- | --- |
+| Build the tool and run its unit tests | `dotnet test RepoBaseline.slnx -p:TreatWarningsAsErrors=true` |
 | Test the shared code-style scripts | `bash tests/scripts/run.sh` |
 | Test the tool | `bash tests/tool/run.sh` |
 | Set up a repository | `dotnet run tool/sync.cs -- init <path> <version> --name <Name> --type application\|library --forge github\|gitlab --repository-url <url> --target-frameworks <tfm>[;<tfm>…]`, optionally with `--private`, `--force` and `--ref <git-ref>` |
@@ -32,11 +36,13 @@ Read `docs/design.md` before changing anything; it describes profiles, the kinds
 
 The script tests need bash, Git and `jq`. They run the scripts against a stub `dotnet`, so they cover argument handling, file selection and report filtering, but not ReSharper itself.
 
-The tool needs Git and the .NET 10 SDK or later; its tests also need bash. The tests build fixture `repo-baseline` repositories with their own profiles and templates under `tmp/`, so changes to the real profiles do not affect them. Run the tool from this repository, not from inside the target repository.
+The tool needs Git and the .NET 10 SDK or later; its tests also need bash. The tests build fixture `repo-baseline` repositories with a copy of the tool and their own profiles and templates under `tmp/`, so changes to the real profiles do not affect them. Run the tool from this repository, not from inside the target repository.
+
+The projects set their own build settings. Do not add a `Directory.Build.props` or `Directory.Packages.props` to the repository root: it would also apply to the fixtures under `tmp/`. Warnings are errors only with `-p:TreatWarningsAsErrors=true`, as in CI, so that a new compiler warning never stops the tool in a repository that runs it.
 
 The preset validator needs Node.js; `npx` downloads the pinned Renovate version. Keep `--no-global`, which validates the files as repository configuration instead of self-hosted configuration.
 
-CI runs both test suites and the validation with these commands, and checks the workflows with `actionlint`. Keep the workflow and this table in sync.
+CI runs the unit tests, both test suites and the validation with these commands, and checks the workflows with `actionlint`. Keep the workflow and this table in sync.
 
 ## Rules for This Repository
 

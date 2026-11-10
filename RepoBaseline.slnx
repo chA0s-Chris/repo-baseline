@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="src/RepoBaseline/RepoBaseline.csproj" />
+  <Project Path="tests/RepoBaseline.Tests/RepoBaseline.Tests.csproj" />
+</Solution>

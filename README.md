@@ -21,7 +21,7 @@ Repositories on GitHub and on self-hosted GitLab instances are supported equally
 
 ## Usage
 
-The tool is a single-file C# app, `tool/sync.cs`. It needs Git and the .NET 10 SDK or later, and no other packages.
+The tool's code is the project `src/RepoBaseline`; `tool/sync.cs` is its entry point, a file-based C# app that `dotnet run` builds together with the project. It needs Git and the .NET 10 SDK or later, and no other packages.
 
 | Command | Effect |
 | --- | --- |

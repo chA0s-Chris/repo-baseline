@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Warnings are errors only in this repository's CI (-p:TreatWarningsAsErrors=true), never when the tool runs. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>Chaos.RepoBaseline</RootNamespace>
+    <AssemblyName>Chaos.RepoBaseline</AssemblyName>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Chaos.RepoBaseline.Tests" />
+  </ItemGroup>
+</Project>

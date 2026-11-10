@@ -34,6 +34,9 @@ jobs:
         uses: raven-actions/actionlint@v2
 
       # The commands below are the ones documented in AGENTS.md.
+      - name: Build and run the unit tests
+        run: dotnet test RepoBaseline.slnx -p:TreatWarningsAsErrors=true
+
       - name: Test the tool
         run: bash tests/tool/run.sh
 
