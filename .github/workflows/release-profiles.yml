@@ -1,0 +1,76 @@
+name: Release profiles
+
+# The maintainer pushes a signed, annotated tag v<version>; this workflow checks the commit, packs the profiles
+# and publishes the archive as a GitHub release. Tool tags (tool/v*) do not match.
+on:
+  push:
+    tags: [ "v*" ]
+
+permissions:
+  contents: read
+
+jobs:
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      prerelease: ${{ steps.version.outputs.prerelease }}
+    steps:
+      - name: Read the version from the tag
+        id: version
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          version="${TAG#v}"
+          # The same rule as the tool's version check.
+          if [[ "${TAG}" != v* ]] || ! [[ "${version}" =~ ^[0-9A-Za-z][0-9A-Za-z.+-]*$ ]]; then
+            echo "::error::Tag ${TAG} is not v followed by a valid version."
+            exit 1
+          fi
+          prerelease=false
+          if [[ "${version}" == 0.* || "${version}" == *-* ]]; then
+            prerelease=true
+          fi
+          echo "version=${version}" >> "${GITHUB_OUTPUT}"
+          echo "prerelease=${prerelease}" >> "${GITHUB_OUTPUT}"
+
+  ci:
+    needs: version
+    uses: ./.github/workflows/ci.yml
+    with:
+      version: ${{ needs.version.outputs.version }}
+
+  publish:
+    needs: [ version, ci ]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      # gh reads the release notes from the annotated tag; fetch it explicitly so that the clone has the tag object.
+      - name: Fetch the annotated tag
+        env:
+          TAG: ${{ github.ref_name }}
+        run: git fetch --force origin "refs/tags/${TAG}:refs/tags/${TAG}"
+
+      - name: Download the profile release
+        uses: actions/download-artifact@v8
+        with:
+          name: profiles
+          path: artifacts/profiles
+
+      - name: Publish the GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+          PRERELEASE: ${{ needs.version.outputs.prerelease }}
+        run: |
+          flags=()
+          if [ "${PRERELEASE}" = true ]; then
+            flags+=(--prerelease)
+          fi
+          gh release create "${TAG}" artifacts/profiles/profiles.tar.gz artifacts/profiles/profiles.tar.gz.sha256 \
+            --verify-tag --title "${TAG}" --notes-from-tag "${flags[@]}"

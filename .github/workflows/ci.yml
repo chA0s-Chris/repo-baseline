@@ -5,6 +5,13 @@ on:
     branches: [ "main" ]
   pull_request:
     branches: [ "main" ]
+  # The profile release workflow runs exactly these checks and publishes the archive this run packs.
+  workflow_call:
+    inputs:
+      version:
+        description: The profile version to pack; empty packs 0.0.0-dev.<short commit>.
+        type: string
+        default: ""
 
 # A new push to a pull request cancels its run that is still in progress; runs on main always finish.
 concurrency:
@@ -43,5 +50,20 @@ jobs:
       - name: Test the shared code-style scripts
         run: bash tests/scripts/run.sh
 
+      - name: Test the release packing
+        run: bash tests/release/run.sh
+
       - name: Validate the Renovate preset and configuration
         run: npx --yes --package renovate@44.181.5 -- renovate-config-validator --strict --no-global renovate/default.json renovate.json
+
+      - name: Pack the profile release
+        env:
+          VERSION: ${{ inputs.version }}
+        run: bash tool/pack-profiles.sh "${VERSION:-0.0.0-dev.$(git rev-parse --short HEAD)}" artifacts/profiles
+
+      - name: Upload the profile release
+        uses: actions/upload-artifact@v7
+        with:
+          name: profiles
+          path: artifacts/profiles/
+          if-no-files-found: error
