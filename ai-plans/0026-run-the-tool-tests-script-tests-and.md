@@ -14,7 +14,7 @@ The goal is that every pull request to `main` and every push to `main` runs thes
 - [x] It runs `bash tests/tool/run.sh`, `bash tests/scripts/run.sh` and the preset validation command from `AGENTS.md`, and fails when any of them fails.
 - [x] It checks the repository's workflows with `actionlint`.
 - [x] A new `renovate.json` extends the shared preset and limits Renovate to the `github-actions` manager, so the action tags get update pull requests.
-- [ ] The workflow passes on the pull request that adds it.
+- [x] The workflow passes on the pull request that adds it.
 - [x] `AGENTS.md` says that CI runs these commands, and its preset validation command also validates `renovate.json`.
 
 ## Technical Details
