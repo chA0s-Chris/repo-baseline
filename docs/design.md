@@ -241,6 +241,8 @@ Releases are Git tags (`v1.0.0`, …). The tool reads the profile content of the
 - **Locally:** run the tool from a clone of `repo-baseline`, passing the target repository's path.
 - **In CI:** a shallow clone of the pinned tag (`git clone --depth 1 --branch v<version>`) followed by `check`. The repository is public, so this works from GitHub and from GitLab.
 
+Every tag after `v0.4.0` is also published as a GitHub release with two assets: `profiles.tar.gz`, which holds the tracked files of `profiles/`, the `LICENSE` and a `release.json` with the profile version and a format version, and `profiles.tar.gz.sha256`. The release workflow runs the CI checks on the tagged commit and publishes the archive that this run packed with `tool/pack-profiles.sh`; versions `0.x` and versions with a pre-release suffix become GitHub pre-releases, and the annotated tag's message becomes the release notes. The archive is deterministic, so the same commit always gives the same bytes and checksum. The tool still reads the tags; reading the archive instead is the next step towards distributing the tool separately.
+
 The clone and the working directory must be outside the target repository. `dotnet run` reads `global.json` from the working directory and `Directory.Build.props`, `Directory.Packages.props` and `NuGet.config` from the directories above `tool/sync.cs`, so the target's build settings would otherwise apply to the tool.
 
 ## Rollout

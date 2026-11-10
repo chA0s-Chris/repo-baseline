@@ -60,6 +60,8 @@ To adopt the baseline in an existing repository, run `init` to add the missing f
 
 Run the tool from a `repo-baseline` clone that is outside the target repository, and with the clone as the working directory. Otherwise the target's `global.json`, `Directory.Build.props`, `Directory.Packages.props` or `NuGet.config` apply to the tool and can break it. A relative `<path>` is resolved against the working directory, which is then the clone.
 
+Each release after `v0.4.0` is also a [GitHub release](https://github.com/chA0s-Chris/repo-baseline/releases) with the profile content as `profiles.tar.gz` and its SHA-256 checksum.
+
 ### Locally
 
 The tool reads each release from the clone's Git objects, so the clone can stay on `main`:

@@ -15,13 +15,16 @@ Read `docs/design.md` before changing anything; it describes profiles, the kinds
 | `profiles/` | Profile content: one directory per profile with synced files, block fragments and created-once templates, as described under "Profile storage" in `docs/design.md` |
 | `src/RepoBaseline/` | The tool's code: a class library with the `init`, `sync` and `check` commands, described under "Tool" in `docs/design.md` |
 | `tool/sync.cs` | The tool's entry point: a file-based app that references `src/RepoBaseline` |
+| `tool/pack-profiles.sh` | Packs the archive of a profile release, described under "Versions and distribution" in `docs/design.md` |
 | `tests/scripts/` | Tests for the shared code-style scripts |
 | `tests/tool/` | Tests for the tool, run through its entry point |
 | `tests/RepoBaseline.Tests/` | Unit tests for the tool's code |
+| `tests/release/` | Tests for `tool/pack-profiles.sh` |
 | `RepoBaseline.slnx` | The solution with the tool's project and its unit tests |
 | `renovate/default.json` | The shared Renovate preset, described under "Renovate preset" in `docs/design.md` |
 | `renovate.json` | This repository's own Renovate configuration: the shared preset, limited to GitHub Actions |
-| `.github/workflows/ci.yml` | CI: runs the commands below on pull requests and pushes to `main` |
+| `.github/workflows/ci.yml` | CI: runs the commands below on pull requests and pushes to `main`, and packs the profile release archive |
+| `.github/workflows/release-profiles.yml` | Publishes a profile release for a pushed `v*` tag |
 
 ## Local Development Commands
 
@@ -30,6 +33,8 @@ Read `docs/design.md` before changing anything; it describes profiles, the kinds
 | Build the tool and run its unit tests | `dotnet test RepoBaseline.slnx -p:TreatWarningsAsErrors=true` |
 | Test the shared code-style scripts | `bash tests/scripts/run.sh` |
 | Test the tool | `bash tests/tool/run.sh` |
+| Test the release packing | `bash tests/release/run.sh` |
+| Pack a profile release | `bash tool/pack-profiles.sh <version> <output-directory>` |
 | Set up a repository | `dotnet run tool/sync.cs -- init <path> <version> --name <Name> --type application\|library --forge github\|gitlab --repository-url <url> --target-frameworks <tfm>[;<tfm>…]`, optionally with `--private`, `--force` and `--ref <git-ref>` |
 | Sync or check a repository | `dotnet run tool/sync.cs -- sync <path>` or `… check <path>`, optionally with `--ref <git-ref>` |
 | Validate the Renovate preset and configuration | `npx --yes --package renovate@44.181.5 -- renovate-config-validator --strict --no-global renovate/default.json renovate.json` |
@@ -42,7 +47,13 @@ The projects set their own build settings. Do not add a `Directory.Build.props` 
 
 The preset validator needs Node.js; `npx` downloads the pinned Renovate version. Keep `--no-global`, which validates the files as repository configuration instead of self-hosted configuration.
 
-CI runs the unit tests, both test suites and the validation with these commands, and checks the workflows with `actionlint`. Keep the workflow and this table in sync.
+The release tests need bash, Git, GNU `tar`, `gzip` and `sha256sum`.
+
+CI runs the unit tests, the three test suites and the validation with these commands, checks the workflows with `actionlint`, and packs the profile release archive as a workflow artifact, with the version `0.0.0-dev.<short commit>`. Keep the workflow and this table in sync.
+
+## Publishing a Profile Release
+
+The maintainer creates a signed, annotated tag `v<version>` on `main`, with the release notes as its message, and pushes it with an explicit refspec (`git push origin refs/tags/v<version>`). The release workflow stops unless the tag is `v` followed by a valid version, runs the CI checks on the tagged commit, and publishes the archive and its checksum as a GitHub release. Versions `0.x` and versions with a pre-release suffix become pre-releases. Agents do not create or push tags unless the maintainer asks for it.
 
 ## Rules for This Repository
 

@@ -12,10 +12,10 @@ The goal is that every new `v*` tag produces a tested GitHub release with an arc
 
 - [ ] A new workflow, `.github/workflows/release-profiles.yml`, runs on pushed `v*` tags. It runs the same checks as CI and then publishes a GitHub release for the tag with `profiles.tar.gz` and `profiles.tar.gz.sha256` as assets.
 - [ ] CI builds the archive and its checksum on every run with `tool/pack-profiles.sh` and uploads them as workflow artifacts, so a pull request shows the archive a release would publish.
-- [ ] A new script, `tool/pack-profiles.sh <version> <output-directory>`, builds the archive. It contains `profiles/`, the `LICENSE` and a generated `release.json` with the profile version and a format version. It keeps executable bits, and building the same commit twice gives byte-identical archives.
+- [x] A new script, `tool/pack-profiles.sh <version> <output-directory>`, builds the archive. It contains `profiles/`, the `LICENSE` and a generated `release.json` with the profile version and a format version. It keeps executable bits, and building the same commit twice gives byte-identical archives.
 - [ ] Versions `0.x` and versions with a pre-release suffix are published as GitHub pre-releases. The release notes come from the annotated tag's message.
-- [ ] Tests for the script in `tests/release/run.sh`, listed in `AGENTS.md`, check the archive's content, its executable bits, `release.json`, the checksum file and the byte-identical rebuild, and CI runs them.
-- [ ] `docs/design.md`, the README and `AGENTS.md` describe profile releases and how the maintainer publishes one.
+- [x] Tests for the script in `tests/release/run.sh`, listed in `AGENTS.md`, check the archive's content, its executable bits, `release.json`, the checksum file and the byte-identical rebuild, and CI runs them.
+- [x] `docs/design.md`, the README and `AGENTS.md` describe profile releases and how the maintainer publishes one.
 
 ## Technical Details
 
