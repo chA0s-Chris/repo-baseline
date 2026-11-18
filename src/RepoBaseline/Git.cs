@@ -6,19 +6,21 @@ using System.Diagnostics;
 using System.Text;
 
 /// <summary>
-/// The <c>repo-baseline</c> checkout that contains this tool and the profile content.
+/// A local <c>repo-baseline</c> checkout given with <c>--checkout</c>, for development and pilots.
 /// </summary>
 internal static class BaselineCheckout
 {
-    public static String Locate()
+    public static String Resolve(String path)
     {
-        var entryPoint = AppContext.GetData("EntryPointFilePath") as String
-                         ?? throw new ToolException("Cannot find the location of sync.cs. Run the tool with `dotnet run tool/sync.cs`.");
-        var toolDirectory = Path.GetDirectoryName(Path.GetFullPath(entryPoint))
-                            ?? throw new ToolException($"Cannot find the directory of {entryPoint}.");
-        if (!Git.TryRun(toolDirectory, out var output, out var error, "rev-parse", "--show-toplevel"))
+        var directory = Path.GetFullPath(path);
+        if (!Directory.Exists(directory))
         {
-            throw new ToolException($"{toolDirectory} is not inside a usable Git checkout of repo-baseline: {error.Trim()}");
+            throw new ToolException($"repo-baseline checkout {directory} does not exist.");
+        }
+
+        if (!Git.TryRun(directory, out var output, out var error, "rev-parse", "--show-toplevel"))
+        {
+            throw new ToolException($"{directory} is not inside a usable Git checkout of repo-baseline: {error.Trim()}");
         }
 
         return Encoding.UTF8.GetString(output).Trim();

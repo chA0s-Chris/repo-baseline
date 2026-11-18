@@ -57,6 +57,7 @@ test_case() {
 }
 
 cp "${ROOT}/tool/pack-profiles.sh" "${FIXTURE}/tool/pack-profiles.sh"
+write "${FIXTURE}/tool/minimum-tool-version" '0.3.0-rc.1'
 write "${FIXTURE}/LICENSE" 'MIT License'
 write "${FIXTURE}/profiles/common/profile.json" '{ "blocks": [] }'
 write "${FIXTURE}/profiles/common/files/CLAUDE.md" 'Read AGENTS.md.'
@@ -88,10 +89,10 @@ while IFS= read -r name; do
     [ "${member_time}" = "${commit_time}" ] || { OUTPUT="${name}: ${member_time}"; fail "expected every entry to have the commit time ${commit_time}"; }
 done <<< "${names}"
 
-test_case "pack: release.json holds the format and the version"
+test_case "pack: release.json holds the format, the version and the minimum tool version"
 release="$(tar -xzOf "${WORK}/first/profiles.tar.gz" release.json)"
-expected_release="$(printf '%s\n' '{' '  "format": 1,' '  "version": "1.2.3"' '}')"
-[ "${release}" = "${expected_release}" ] || { OUTPUT="${release}"; fail "expected release.json with format 1 and version 1.2.3"; }
+expected_release="$(printf '%s\n' '{' '  "format": 2,' '  "version": "1.2.3",' '  "minimumToolVersion": "0.3.0-rc.1"' '}')"
+[ "${release}" = "${expected_release}" ] || { OUTPUT="${release}"; fail "expected release.json with format 2, version 1.2.3 and minimum tool version 0.3.0-rc.1"; }
 
 test_case "pack: the checksum file verifies the archive in the format of sha256sum"
 checksum="$(cat "${WORK}/first/profiles.tar.gz.sha256")"
@@ -105,17 +106,42 @@ chmod 644 "${FIXTURE}/profiles/common/files/CLAUDE.md"
 cmp -s "${WORK}/first/profiles.tar.gz" "${WORK}/second/profiles.tar.gz" || fail "expected byte-identical archives"
 cmp -s "${WORK}/first/profiles.tar.gz.sha256" "${WORK}/second/profiles.tar.gz.sha256" || fail "expected identical checksum files"
 
-test_case "pack: changes to tracked profiles or the LICENSE are refused, staged or not, and nothing is written"
+test_case "pack: changes to tracked profiles, the LICENSE or the minimum tool version are refused, staged or not, and nothing is written"
 write "${FIXTURE}/profiles/common/files/CLAUDE.md" 'Uncommitted.'
 pack 1.2.3 "${WORK}/dirty"
 expect_status 2
-expect_output "error: LICENSE or profiles/ differ from HEAD; commit or stash the changes before packing a release."
+expect_output "error: LICENSE, profiles/ or tool/minimum-tool-version differ from HEAD; commit or stash the changes before packing a release."
 [ -e "${WORK}/dirty" ] && fail "expected nothing to be written for an uncommitted change"
 git -C "${FIXTURE}" add profiles/common/files/CLAUDE.md
 pack 1.2.3 "${WORK}/staged"
 expect_status 2
 [ -e "${WORK}/staged" ] && fail "expected nothing to be written for a staged change"
 git -C "${FIXTURE}" reset --quiet --hard
+write "${FIXTURE}/tool/minimum-tool-version" '0.4.0'
+pack 1.2.3 "${WORK}/minimum"
+expect_status 2
+[ -e "${WORK}/minimum" ] && fail "expected nothing to be written for an uncommitted minimum tool version"
+git -C "${FIXTURE}" reset --quiet --hard
+
+test_case "pack: a minimum tool version that is not SemVer 2.0 without build metadata is refused, and nothing is written"
+for minimum in '1.0' 'v1.0.0' '01.0.0' '1.0.0+build' '1.0.0-' 'latest'; do
+    write "${FIXTURE}/tool/minimum-tool-version" "${minimum}"
+    git -C "${FIXTURE}" -c user.email=test@example.invalid -c user.name=test commit --quiet -am "minimum ${minimum}"
+    pack 1.2.3 "${WORK}/invalid-minimum"
+    expect_status 2
+    expect_output "error: tool/minimum-tool-version holds '${minimum}', which is not a SemVer 2.0 version without build metadata."
+    [ -e "${WORK}/invalid-minimum" ] && fail "expected nothing to be written for minimum tool version '${minimum}'"
+    git -C "${FIXTURE}" reset --quiet --hard HEAD~1
+done
+
+test_case "pack: an untracked minimum tool version is refused"
+git -C "${FIXTURE}" rm --quiet --cached tool/minimum-tool-version
+git -C "${FIXTURE}" -c user.email=test@example.invalid -c user.name=test commit --quiet -m "untrack the minimum"
+write "${FIXTURE}/tool/minimum-tool-version" '0.3.0'
+pack 1.2.3 "${WORK}/untracked"
+expect_status 2
+expect_output "error: tool/minimum-tool-version is not tracked."
+git -C "${FIXTURE}" reset --quiet --hard HEAD~1
 
 test_case "pack: an invalid version or missing arguments are usage errors, and nothing is written"
 for version in '' '-1.0' 'v1.0/x' '1.0 beta'; do

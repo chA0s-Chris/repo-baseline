@@ -10,22 +10,22 @@ The goal is that repositories pin the tool in their tool manifest and the profil
 
 ## Acceptance Criteria
 
-- [ ] `src/RepoBaseline` packs as a .NET tool with the package ID `Chaos.RepoBaseline` and the command `repo-baseline`; `tool/sync.cs` is removed.
-- [ ] By default, the tool downloads `profiles.tar.gz` and `profiles.tar.gz.sha256` of `v<version>` from the GitHub release, verifies the checksum, caches the verified archive per version, and reuses the cache on later runs without downloading.
-- [ ] A checksum mismatch, a missing release or a missing asset is an error with exit code `2`, and nothing is cached.
-- [ ] `release.json` has format version `2` with a `minimumToolVersion`, which `tool/pack-profiles.sh` reads from the new tracked file `tool/minimum-tool-version`.
-- [ ] The tool refuses, with exit code `2`, an archive that needs a newer tool or has an unknown format version, and the message names the required tool version. Archives of format version `1` are accepted and have no minimum.
-- [ ] `--checkout <path>` reads the profile content from the Git objects of a local `repo-baseline` checkout, as the tool does today; `--ref` is accepted only together with `--checkout`.
-- [ ] The `dotnet` profile's `dotnet-tools.json` template lists `chaos.repobaseline` with the new placeholder `{{ToolVersion}}`, which `init` fills with its own version.
-- [ ] `renovate/default.json` has a custom manager for the `version` in `.repo-baseline.json`, using the `github-releases` datasource of `chA0s-Chris/repo-baseline`, and the Renovate validator passes.
-- [ ] The README's CI snippet is `dotnet tool restore` followed by `dotnet repo-baseline check .`, the same for GitHub and GitLab.
-- [ ] The README and the adoption section of `docs/design.md` show how to run `init` without a tool manifest, with `dnx Chaos.RepoBaseline`, and that an adopted repository with its own `dotnet-tools.json` adds the tool with `dotnet tool install Chaos.RepoBaseline`.
-- [ ] The README, `AGENTS.md` and `docs/design.md` describe the distribution and the local checkout option, and `docs/design.md` replaces the open question on distribution with the decision.
-- [ ] Unit tests cover the download, checksum verification, cache reuse and re-download, the format and minimum version check, and the version comparison.
-- [ ] The tool tests run the built tool with `--checkout`.
-- [ ] The tool tests read fixture archives through a cache directory set with `REPO_BASELINE_CACHE`.
-- [ ] A tool test installs the packed tool from a local package source through a tool manifest and runs `check` with it.
-- [ ] The release tests check format version `2` and the `minimumToolVersion` in `release.json`.
+- [x] `src/RepoBaseline` packs as a .NET tool with the package ID `Chaos.RepoBaseline` and the command `repo-baseline`; `tool/sync.cs` is removed.
+- [x] By default, the tool downloads `profiles.tar.gz` and `profiles.tar.gz.sha256` of `v<version>` from the GitHub release, verifies the checksum, caches the verified archive per version, and reuses the cache on later runs without downloading.
+- [x] A checksum mismatch, a missing release or a missing asset is an error with exit code `2`, and nothing is cached.
+- [x] `release.json` has format version `2` with a `minimumToolVersion`, which `tool/pack-profiles.sh` reads from the new tracked file `tool/minimum-tool-version`.
+- [x] The tool refuses, with exit code `2`, an archive that needs a newer tool or has an unknown format version, and the message names the required tool version. Archives of format version `1` are accepted and have no minimum.
+- [x] `--checkout <path>` reads the profile content from the Git objects of a local `repo-baseline` checkout, as the tool does today; `--ref` is accepted only together with `--checkout`.
+- [x] The `dotnet` profile's `dotnet-tools.json` template lists `chaos.repobaseline` with the new placeholder `{{ToolVersion}}`, which `init` fills with its own version.
+- [x] `renovate/default.json` has a custom manager for the `version` in `.repo-baseline.json`, using the `github-releases` datasource of `chA0s-Chris/repo-baseline`, and the Renovate validator passes.
+- [x] The README's CI snippet is `dotnet tool restore` followed by `dotnet repo-baseline check .`, the same for GitHub and GitLab.
+- [x] The README and the adoption section of `docs/design.md` show how to run `init` without a tool manifest, with `dnx Chaos.RepoBaseline`, and that an adopted repository with its own `dotnet-tools.json` adds the tool with `dotnet tool install Chaos.RepoBaseline`.
+- [x] The README, `AGENTS.md` and `docs/design.md` describe the distribution and the local checkout option, and `docs/design.md` replaces the open question on distribution with the decision.
+- [x] Unit tests cover the download, checksum verification, cache reuse and re-download, the format and minimum version check, and the version comparison.
+- [x] The tool tests run the built tool with `--checkout`.
+- [x] The tool tests read fixture archives through a cache directory set with `REPO_BASELINE_CACHE`.
+- [x] A tool test installs the packed tool from a local package source through a tool manifest and runs `check` with it.
+- [x] The release tests check format version `2` and the `minimumToolVersion` in `release.json`.
 
 ## Technical Details
 

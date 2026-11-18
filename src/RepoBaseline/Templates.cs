@@ -40,7 +40,8 @@ internal static class Templates
             ["LayerGuid"] = Guid.NewGuid().ToString("N").ToUpperInvariant(),
             ["TargetFrameworkProperties"] = targetFrameworks,
             ["SourceLinkGitLabHost"] = selfHostedGitLab ? $"<ItemGroup>\n  <SourceLinkGitLabHost Include=\"{GitLabHost(options.Repository)}\" />\n</ItemGroup>" : String.Empty,
-            ["LicenseNotice"] = options.Private ? String.Empty : LicenseNotice
+            ["LicenseNotice"] = options.Private ? String.Empty : LicenseNotice,
+            ["ToolVersion"] = ToolVersion.Current.ToString()
         };
     }
 

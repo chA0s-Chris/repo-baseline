@@ -287,6 +287,7 @@ Some repositories commit selected Rider files, such as scopes or project setting
 - `rangeStrategy: bump` for NuGet, which restores the old update behavior for bare versions.
 - FluentAssertions stays below version 8 (TST-1).
 - The groups "NUnit" (`NUnit`, `NUnit.Analyzers`, `NUnit3TestAdapter`), "Test SDK" (`Microsoft.NET.Test.Sdk`, `Microsoft.TestPlatform.TestHost`, `Microsoft.Testing.Platform`, `Microsoft.Testing.Extensions.CodeCoverage`) and "GitHub Actions". The Actions group has no effect on GitLab or in repositories without workflows, so it is shared instead of added per repository.
+- A custom manager for the profile release that `.repo-baseline.json` pins, read from the GitHub releases of `repo-baseline`. It does not ignore GitHub pre-releases, because the `0.x` profile releases are marked as such.
 
 Repository-specific rules stay in the repository's `renovate.json`: custom managers and version holds for test images, Dashboard approval for dependency minimums, and presets such as `helpers:pinGitHubActionDigests`.
 

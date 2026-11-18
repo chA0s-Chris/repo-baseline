@@ -1,12 +1,13 @@
 #!/bin/bash
-# Tests for the tool, run through its entry point tool/sync.cs: built once per fixture checkout and started with
-# `dotnet`, and once with `dotnet run tool/sync.cs` as in the README's CI snippet.
+# Tests for the tool: built once and started with `dotnet`, and once packed and installed as a .NET tool through a
+# tool manifest, as in the README's CI snippet.
 #
-# The tests build a fixture repo-baseline repository under tmp/ with a copy of the tool and fixture
-# profiles, tag releases in it, and run the tool from there against throwaway target repositories. A second
-# fixture repository has profiles with templates under the names that `init` selects. The fixture profiles
-# are independent of the real ones, so profile changes do not break the tests. The tests need bash, Git and
-# the .NET 10 SDK or later.
+# The tests build a fixture repo-baseline repository under tmp/ with fixture profiles, tag releases in it, and run
+# the tool with `--checkout` against throwaway target repositories. A second fixture repository has profiles with
+# templates under the names that `init` selects. The fixture profiles are independent of the real ones, so profile
+# changes do not break the tests. Release archives are packed from the fixture with tool/pack-profiles.sh into a
+# cache directory set with REPO_BASELINE_CACHE, so no test downloads anything. The tests need bash, Git, GNU tar,
+# gzip, sha256sum and the .NET 10 SDK or later.
 set -euo pipefail
 
 # Throwaway repositories must not depend on the user's or system's Git configuration,
@@ -17,6 +18,7 @@ export DOTNET_NOLOGO=1 DOTNET_CLI_TELEMETRY_OPTOUT=1 DOTNET_CLI_WORKLOAD_UPDATE_
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 WORK="${ROOT}/tmp/tool-tests"
 BASELINE="${WORK}/baseline"
+CACHE="${WORK}/cache"
 
 rm -rf "${WORK}"
 mkdir -p "${WORK}"
@@ -29,15 +31,12 @@ write() {
     printf '%s\n' "$@" > "${path}"
 }
 
-# Copies the tool, its entry point and its project, into a fixture checkout. Running the tool builds the
-# project there, so the checkout ignores the build output.
-copy_tool() {
-    local file
-    while IFS= read -r file; do
-        mkdir -p "$1/$(dirname "${file}")"
-        cp "${ROOT}/${file}" "$1/${file}"
-    done < <(cd "${ROOT}" && find tool/sync.cs src/RepoBaseline \( -name bin -o -name obj \) -prune -o -type f -print)
-    write "$1/.gitignore" 'bin/' 'obj/'
+# Copies the script that packs release archives into a fixture checkout, with a minimum tool version that the
+# tool under test, a development build with the version 0.0.0-dev, meets.
+copy_packer() {
+    mkdir -p "$1/tool"
+    cp "${ROOT}/tool/pack-profiles.sh" "$1/tool/pack-profiles.sh"
+    write "$1/tool/minimum-tool-version" '0.0.0-dev'
 }
 
 commit() {
@@ -52,11 +51,11 @@ commit() {
 #   forge  a block in .github/review.md
 # v1.0.0 and v1.1.0 differ in docs/GUIDE.md and the rules block; HEAD is an unreleased commit after v1.1.0.
 build_baseline() {
-    mkdir -p "${BASELINE}/tool"
+    mkdir -p "${BASELINE}"
     git -C "${BASELINE}" init --quiet --initial-branch=main
     git -C "${BASELINE}" config user.email test@example.invalid
     git -C "${BASELINE}" config user.name test
-    copy_tool "${BASELINE}"
+    copy_packer "${BASELINE}"
 
     local profiles="${BASELINE}/profiles"
     write "${profiles}/base/profile.json" '{' '  "blocks": [' \
@@ -106,6 +105,9 @@ build_baseline() {
 
     write "${profiles}/base/files/docs/GUIDE.md" 'Guide unreleased.'
     commit "${BASELINE}" unreleased
+
+    # A release that needs a newer tool than the one under test.
+    fixture_ref newer-tool write "${BASELINE}/tool/minimum-tool-version" '99.0.0'
 
     # Refs whose profiles are invalid, and one with a stray file under profiles/.
     fixture_ref broken broken_profile "${profiles}/broken"
@@ -188,42 +190,44 @@ new_target() {
     write "${TARGET}/.repo-baseline.json" '{' "  \"version\": \"${2:-1.0.0}\"," "  \"profiles\": $1" '}'
 }
 
-# The built entry point of each checkout, so that the tool is built once per checkout and not checked by
-# MSBuild on every call, which `dotnet run` does for an entry point with a project reference. The build keeps
-# the checkout's own tool/sync.cs as the entry point's path, so the tool still finds that checkout.
-declare -A BUILT_TOOLS=()
+# The tool is built once, so that MSBuild does not check it on every call, as `dotnet run` would.
+TOOL="${WORK}/bin/Chaos.RepoBaseline.dll"
 
 build_tool() {
-    local checkout="$1" output build_log
-    output="${WORK}/bin/${#BUILT_TOOLS[@]}"
-    if ! build_log=$(cd "${checkout}" && dotnet build tool/sync.cs -o "${output}" 2>&1); then
-        echo "Building the tool in ${checkout} failed:"
+    local build_log
+    if ! build_log=$(dotnet build "${ROOT}/src/RepoBaseline/RepoBaseline.csproj" -o "${WORK}/bin" 2>&1); then
+        echo "Building the tool failed:"
         echo "${build_log}"
         exit 1
     fi
-    BUILT_TOOLS["${checkout}"]="${output}/sync.dll"
 }
 
-# Runs the tool from the given repo-baseline checkout, outside the target repository,
-# and records its exit code and combined output in STATUS and OUTPUT.
+# Runs the tool with the given repo-baseline checkout as --checkout, from inside that checkout, and records its exit
+# code and combined output in STATUS and OUTPUT.
 run_tool_from() {
     local checkout="$1"
     shift
-    [ -n "${BUILT_TOOLS["${checkout}"]-}" ] || build_tool "${checkout}"
     set +e
-    OUTPUT=$(cd "${checkout}" && dotnet "${BUILT_TOOLS["${checkout}"]}" "$@" 2>&1)
+    OUTPUT=$(cd "${checkout}" && dotnet "${TOOL}" --checkout "${checkout}" "$@" 2>&1)
     STATUS=$?
     set -e
 }
 
-# Runs the tool with `dotnet run tool/sync.cs`, as the CI snippet in the README does.
-run_tool_with_dotnet_run_from() {
-    local checkout="$1"
-    shift
+# Runs the tool without --checkout, so that it reads release archives from the cache.
+run_tool_with_archives() {
     set +e
-    OUTPUT=$(cd "${checkout}" && dotnet run tool/sync.cs -- "$@" 2>&1)
+    OUTPUT=$(cd "${WORK}" && REPO_BASELINE_CACHE="${CACHE}" dotnet "${TOOL}" "$@" 2>&1)
     STATUS=$?
     set -e
+}
+
+# Packs the profiles of a ref of the fixture repository with its own tool/pack-profiles.sh as release <version>
+# into the cache, as if the tool had downloaded and verified it.
+pack_release() {
+    local ref="$1" version="$2" clone="${WORK}/pack-$2"
+    rm -rf "${clone}"
+    git clone --quiet --branch "${ref}" "file://${BASELINE}" "${clone}" 2> /dev/null
+    bash "${clone}/tool/pack-profiles.sh" "${version}" "${CACHE}/${version}" > /dev/null
 }
 
 run_tool() {
@@ -273,6 +277,7 @@ test_case() {
     echo "$1"
 }
 
+build_tool
 build_baseline
 
 test_case "sync: writes whole files and blocks into an empty repository"
@@ -1013,18 +1018,72 @@ run_tool check "${TARGET}" --ref broken
 expect_status 2
 expect_output "broken: no block marker syntax is defined for notes.txt."
 
-# A smoke test of the README's CI snippet: run with `dotnet run` from a clone outside the target, the target's
-# build files cannot reach the tool.
-test_case "shallow tag clone: syncs and checks a target that has its own Directory.Build.props"
-git clone --quiet --depth 1 --branch v1.1.0 "file://${BASELINE}" "${WORK}/shallow" 2> /dev/null
+test_case "archive: sync and check read the release archive of the pinned version from the cache"
+pack_release v1.1.0 1.1.0
+new_target '["base", "extra"]' 1.1.0
+run_tool_with_archives sync "${TARGET}"
+expect_status 0
+expect_output "v1.1.0"
+expect_file docs/GUIDE.md 'Guide v2.'
+expect_executable tool.sh
+run_tool_with_archives check "${TARGET}"
+expect_status 0
+
+test_case "archive: a release that needs a newer tool is refused, and nothing is written"
+pack_release newer-tool 1.2.0
+new_target '["base", "extra"]' 1.2.0
+run_tool_with_archives sync "${TARGET}"
+expect_status 2
+expect_output "error: v1.2.0 needs repo-baseline 99.0.0 or later; this is 0.0.0-dev."
+expect_no_file docs/GUIDE.md
+run_tool_with_archives check "${TARGET}"
+expect_status 2
+
+test_case "archive: --ref needs --checkout"
+new_target '["base"]' 1.1.0
+run_tool_with_archives check "${TARGET}" --ref main
+expect_status 2
+expect_output "error: --ref reads a Git ref of a repo-baseline checkout and needs --checkout <path>."
+
+test_case "errors: --checkout needs the path of a usable repo-baseline checkout"
+new_target '["base"]' 1.1.0
+run_tool_with_archives check "${TARGET}" --checkout ''
+expect_status 2
+expect_output "error: --checkout needs the path of a repo-baseline checkout."
+run_tool_with_archives check "${TARGET}" --checkout "${WORK}/missing"
+expect_status 2
+expect_output "error: repo-baseline checkout ${WORK}/missing does not exist."
+# Outside this repository, because every directory below tmp/ is inside its checkout.
+NOT_A_CHECKOUT="$(mktemp -d)"
+run_tool_with_archives check "${TARGET}" --checkout "${NOT_A_CHECKOUT}"
+rm -rf "${NOT_A_CHECKOUT}"
+expect_status 2
+expect_output "error: ${NOT_A_CHECKOUT} is not inside a usable Git checkout of repo-baseline:"
+
+# A smoke test of the README's CI snippet: the packed tool, restored through a tool manifest from a local package
+# source, run in the target repository. The target's own build files do not reach the tool. The packages go to their
+# own folder, because NuGet would otherwise reuse a package of an earlier run with the same version.
+test_case "packed tool: restores through a tool manifest and syncs and checks the target it runs in"
+PACKAGES="${WORK}/packages"
+if ! pack_log=$(dotnet pack "${ROOT}/src/RepoBaseline/RepoBaseline.csproj" -o "${PACKAGES}" 2>&1); then
+    echo "Packing the tool failed:"
+    echo "${pack_log}"
+    exit 1
+fi
 new_target '["base", "extra"]' 1.1.0
 write "${TARGET}/Directory.Build.props" 'This would break any build that imports it.'
-write "${TARGET}/global.json" '{ "sdk": { "version": "1.0.0" } }'
-run_tool_with_dotnet_run_from "${WORK}/shallow" sync "${TARGET}"
+write "${TARGET}/nuget.config" '<?xml version="1.0" encoding="utf-8"?>' '<configuration>' '  <packageSources>' '    <clear />' \
+    "    <add key=\"local\" value=\"${PACKAGES}\" />" '  </packageSources>' '</configuration>'
+write "${TARGET}/dotnet-tools.json" '{' '  "version": 1,' '  "isRoot": true,' '  "tools": {' '    "chaos.repobaseline": {' \
+    '      "version": "0.0.0-dev",' '      "commands": [ "repo-baseline" ],' '      "rollForward": false' '    }' '  }' '}'
+set +e
+OUTPUT=$(cd "${TARGET}" && export NUGET_PACKAGES="${WORK}/nuget-packages" REPO_BASELINE_CACHE="${CACHE}" \
+    && { dotnet tool restore && dotnet repo-baseline sync . && dotnet repo-baseline check .; } 2>&1)
+STATUS=$?
+set -e
 expect_status 0
+expect_output "matches v1.1.0."
 expect_file docs/GUIDE.md 'Guide v2.'
-run_tool_with_dotnet_run_from "${WORK}/shallow" check "${TARGET}"
-expect_status 0
 
 # The init fixture uses the profile names that init selects: common, dotnet, dotnet-nuget, github and gitlab.
 #   common        a whole file, two blocks, and templates for AGENTS.md, .gitignore, README.md and LICENSE
@@ -1040,11 +1099,10 @@ YEAR="$(date +%Y)"
 NOTICE='\nThis file is licensed under the MIT license. See LICENSE in the project root for more information.'
 
 build_init_baseline() {
-    mkdir -p "${INIT_BASELINE}/tool"
+    mkdir -p "${INIT_BASELINE}"
     git -C "${INIT_BASELINE}" init --quiet --initial-branch=main
     git -C "${INIT_BASELINE}" config user.email test@example.invalid
     git -C "${INIT_BASELINE}" config user.name test
-    copy_tool "${INIT_BASELINE}"
 
     local profiles="${INIT_BASELINE}/profiles"
     write "${profiles}/common/profile.json" '{' '  "blocks": [' \
@@ -1056,7 +1114,7 @@ build_init_baseline() {
     write "${profiles}/common/files/CLAUDE.md" 'Read AGENTS.md.'
     write "${profiles}/common/templates/AGENTS.md" '# {{Name}}' '' '<!-- BEGIN repo-baseline: rules -->' '<!-- END repo-baseline: rules -->'
     write "${profiles}/common/templates/.gitignore" '# BEGIN repo-baseline: gitignore' '# END repo-baseline: gitignore' '' '.idea/'
-    write "${profiles}/common/templates/README.md" '# {{Name}}' '' 'Source: {{RepositoryUrl}}'
+    write "${profiles}/common/templates/README.md" '# {{Name}}' '' 'Source: {{RepositoryUrl}}' 'Tool: {{ToolVersion}}'
     write "${profiles}/common/templates/LICENSE" 'Copyright (c) {{Year}} Holder'
 
     write "${profiles}/dotnet/profile.json" '{' '  "blocks": [' \
@@ -1179,7 +1237,7 @@ expect_file AGENTS.md '# Sample' '' 'Run `dotnet test Sample.slnx`.' '' \
     '<!-- BEGIN repo-baseline: rules -->' '## Rules' '<!-- END repo-baseline: rules -->' '' \
     '<!-- BEGIN repo-baseline: code-style -->' '## Code style' '<!-- END repo-baseline: code-style -->'
 expect_file .gitignore '# BEGIN repo-baseline: gitignore' '/tmp/' '# END repo-baseline: gitignore' '' '.idea/' 'Sample.snk'
-expect_file README.md '# Sample' '' 'Source: https://github.com/example/Sample'
+expect_file README.md '# Sample' '' 'Source: https://github.com/example/Sample' 'Tool: 0.0.0-dev'
 expect_file LICENSE "Copyright (c) ${YEAR} Holder"
 expect_file .editorconfig '[*.cs]' "file_header_template = Copyright (c) ${YEAR} Holder.${NOTICE}"
 expect_file Sample.slnx '<Solution>' '</Solution>'
@@ -1285,7 +1343,7 @@ expect_output ".repo-baseline.json: overwritten"
 expect_output ".github/review.md: blocks merged"
 expect_output "Sample.snk: an existing strong-name key is never replaced"
 expect_no_output "Run sync"
-expect_file README.md '# Sample' '' 'Source: https://github.com/example/Sample'
+expect_file README.md '# Sample' '' 'Source: https://github.com/example/Sample' 'Tool: 0.0.0-dev'
 expect_file CLAUDE.md 'Read AGENTS.md.'
 expect_file .github/review.md '<!-- BEGIN repo-baseline: review -->' 'Review rules.' '<!-- END repo-baseline: review -->' '' 'Local review.'
 cmp -s "${WORK}/key-before" "${TARGET}/Sample.snk" || fail "expected --force to keep the existing key"
@@ -1517,11 +1575,10 @@ expect_files
 
 # The real profiles of the working tree, committed to a fixture repository, so that templates are tested before they are committed.
 REAL_BASELINE="${WORK}/real-baseline"
-mkdir -p "${REAL_BASELINE}/tool"
+mkdir -p "${REAL_BASELINE}"
 git -C "${REAL_BASELINE}" init --quiet --initial-branch=main
 git -C "${REAL_BASELINE}" config user.email test@example.invalid
 git -C "${REAL_BASELINE}" config user.name test
-copy_tool "${REAL_BASELINE}"
 cp -R "${ROOT}/profiles" "${REAL_BASELINE}/profiles"
 commit "${REAL_BASELINE}" "real profiles"
 
@@ -1546,6 +1603,8 @@ for type in application library; do
             OUTPUT=$(cat "${WORK}/unfilled")
             fail "expected every placeholder to be filled in"
         fi
+        grep -qF '"chaos.repobaseline": {' "${TARGET}/dotnet-tools.json" && grep -qF '"version": "0.0.0-dev",' "${TARGET}/dotnet-tools.json" \
+            || fail "expected dotnet-tools.json to pin the tool at the version of the tool that ran init"
         run_tool_from "${REAL_BASELINE}" check "${TARGET}" --ref main
         expect_status 0
     done

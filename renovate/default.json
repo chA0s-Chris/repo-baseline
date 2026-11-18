@@ -16,6 +16,22 @@
   "major": {
     "dependencyDashboardApproval": true
   },
+  "customManagers": [
+    {
+      "description": "The profile release that .repo-baseline.json pins. The update pull request changes only the version; run sync on its branch.",
+      "customType": "jsonata",
+      "fileFormat": "json",
+      "managerFilePatterns": [
+        "/^\\.repo-baseline\\.json$/"
+      ],
+      "matchStrings": [
+        "{ \"currentValue\": version }"
+      ],
+      "datasourceTemplate": "github-releases",
+      "depNameTemplate": "chA0s-Chris/repo-baseline",
+      "extractVersionTemplate": "^v(?<version>.+)$"
+    }
+  ],
   "ignorePaths": [
     "**/node_modules/**",
     "**/bower_components/**",
@@ -56,6 +72,16 @@
         "Microsoft.Testing.Platform",
         "Microsoft.Testing.Extensions.CodeCoverage"
       ]
+    },
+    {
+      "description": "Profile releases 0.x are GitHub pre-releases, which Renovate would otherwise skip",
+      "matchDatasources": [
+        "github-releases"
+      ],
+      "matchPackageNames": [
+        "chA0s-Chris/repo-baseline"
+      ],
+      "ignoreUnstable": false
     },
     {
       "groupName": "GitHub Actions",
