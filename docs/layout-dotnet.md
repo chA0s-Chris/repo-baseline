@@ -76,7 +76,7 @@ Decisions referenced as `CS-…`, `BLD-…` and so on are recorded in [decisions
 | `.editorconfig` | block | The shared block comes first and starts with `root = true`. Local sections follow it: at least a `[*.cs]` section with the `file_header_template`, plus path-specific sections if needed. |
 | `<Name>.slnx.DotSettings` | created once | Injects `.repo-baseline/ReSharper.DotSettings` as a settings layer. Contains only local settings: dictionary words and naming abbreviations (CS-3). Must not redefine shared keys. |
 | `CODESTYLE.md` | synced | Human-readable code style. Repository-specific code style rules go into `AGENTS.md` or a nested `AGENTS.md`. |
-| `cleanup_code.sh` | synced | Applies the `Zorn` cleanup profile to changed, staged and untracked files, or to the whole solution with `--all` (TOOL-1). |
+| `cleanup_code.sh` | synced | Applies the `Zorn` cleanup profile to changed, staged and untracked files, or with `--all` to all files of the same types in the solution. Both modes leave Razor and plain XML files out (TOOL-1). |
 | `inspect_code.sh` | synced | Runs ReSharper inspections on changed files, on a branch (`--base`), or on the whole solution (`--all`). Its warnings and errors are what needs fixing; suggestions are ignored (CS-11). Suppressed inspection IDs come from `.repo-baseline.json`, so the script needs `jq`. |
 | `dotnet-tools.json` | created once | In the root for SDK 10 or later, in `.config/dotnet-tools.json` for older SDKs (BLD-5). Contains at least `jetbrains.resharper.globaltools` and `dotnet-coverage`. Repositories add further tools such as `dotnet-ef`. |
 

@@ -238,9 +238,9 @@ Some existing repositories have a `MyProject.E2E.Tests` project without Aspire; 
 
 `cleanup_code.sh` and `inspect_code.sh` are the same in every .NET repository:
 
-- Both select changed, staged and untracked files, including rename destinations (`--diff-filter=ACMR`). `--all` selects the whole solution instead.
-- `inspect_code.sh` selects C# and Razor files. Scoped cleanup leaves Razor files out on purpose: on a Blazor codebase, ReSharper's Razor cleanup turned `String` into `string`, moved `[Inject]` attributes onto the property line and reformatted markup, so it does not apply the shared C# rules to Razor. Inspecting Razor files produced only sensible findings.
-- Scoped cleanup selects the MSBuild and packaging files (`.csproj`, `.slnx`, `.props`, `.targets`, `.nuspec`, `.config`) but not plain `.xml` files, which are often data such as test fixtures.
+- Both select changed, staged and untracked files, including rename destinations (`--diff-filter=ACMR`). `--all` selects all files of the same types in the whole solution instead.
+- `inspect_code.sh` selects C# and Razor files. `cleanup_code.sh` leaves Razor files out on purpose, with and without `--all`: on a Blazor codebase, ReSharper's Razor cleanup turned `String` into `string`, moved `[Inject]` attributes onto the property line and reformatted markup, so it does not apply the shared C# rules to Razor. Inspecting Razor files produced only sensible findings.
+- Cleanup selects C#, JSON and shell files and the MSBuild and packaging files (`.csproj`, `.slnx`, `.props`, `.targets`, `.nuspec`, `.config`), but not plain `.xml` files, which are often data such as test fixtures. `--all` passes these types to `cleanupcode` as file masks, so it cleans no other file types, such as Razor, `.cshtml`, CSS, JavaScript, TypeScript, HTML or YAML. A whole-solution cleanup that included Razor removed `@using` directives that component bindings needed, and the build failed.
 - Both use the single `.slnx` file in the repository root instead of a hard-coded name, and fail when there is none or more than one.
 - `inspect_code.sh` reports warnings and errors by default, reads the XML report, and groups findings by project.
 - The report lists a finding once per target framework of a multi-targeted project. `inspect_code.sh` prints it once. When a finding occurs in only some of the frameworks that appear in its project's findings, the line ends with those frameworks, for example `(net8.0)`. The report does not say which frameworks a project targets, so a framework without any finding is unknown.
