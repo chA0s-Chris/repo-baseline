@@ -21,7 +21,7 @@ Repositories on GitHub and on self-hosted GitLab instances are supported equally
 
 ## Usage
 
-The tool is the .NET tool [`Chaos.RepoBaseline`](https://www.nuget.org/packages/Chaos.RepoBaseline) with the command `repo-baseline`. A repository pins its version in its tool manifest, `dotnet-tools.json`, and runs it with `dotnet repo-baseline` in the repository root after `dotnet tool restore`. The tool needs the .NET 10 runtime or later, and Git only for `--checkout`.
+The tool is the .NET tool [`Chaos.RepoBaseline`](https://www.nuget.org/packages/Chaos.RepoBaseline) with the command `repo-baseline`. A repository pins its version in its tool manifest, `dotnet-tools.json`, and runs it with `dotnet repo-baseline` in the repository root after `dotnet tool restore`. The tool needs the .NET 10 SDK or later, because `dotnet tool restore` and local tools are SDK commands, and Git only for `--checkout`.
 
 The tool and the profile content have separate versions: `dotnet-tools.json` pins the tool, and `.repo-baseline.json` pins the profile release. The tool downloads the profile content of that release from its [GitHub release](https://github.com/chA0s-Chris/repo-baseline/releases), verifies its SHA-256 checksum and caches it per version, in `REPO_BASELINE_CACHE` or in the user's cache directory (`~/.cache/repo-baseline`, or `%LOCALAPPDATA%\repo-baseline\cache` on Windows). Releases up to `v0.4.0` have no profile archive. A release that needs a newer tool is refused; update the tool in `dotnet-tools.json` first.
 
@@ -91,7 +91,7 @@ dotnet tool restore
 dotnet repo-baseline check .
 ```
 
-The job needs the .NET 10 runtime or later and access to `github.com` for the profile release.
+The job needs the .NET 10 SDK or later, not only the runtime, and access to `github.com` for the profile release.
 
 ### Updating to a new release
 
