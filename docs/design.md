@@ -185,7 +185,7 @@ Package versions stay in the repository's `Directory.Packages.props`, where Reno
 
 Shared Renovate rules are published as a preset in this repository (`renovate/default.json`). Repositories reference it with `"extends": ["github>chA0s-Chris/repo-baseline//renovate/default"]` in the created-once `renovate.json` instead of copying rules.
 
-The preset contains `config:recommended`, Dependency Dashboard approval for major updates, the `renovate` label, an `ignorePaths` list without `**/tests/**`, the NuGet range strategy, the FluentAssertions hold (TST-1) and groups for NUnit, the test SDK and GitHub Actions. Custom managers, version holds and other repository-specific rules stay in the repository's `renovate.json` (TOOL-5).
+The preset contains `config:recommended`, Dependency Dashboard approval for major updates, the `renovate` label, an `ignorePaths` list without `**/tests/**`, the NuGet range strategy, the FluentAssertions hold (TST-1), groups for NUnit, the test SDK and GitHub Actions, and a custom manager for the profile version in `.repo-baseline.json` (see "Versions and distribution"). Custom managers, version holds and other repository-specific rules stay in the repository's `renovate.json` (TOOL-5).
 
 Unlike synced content, the preset is not pinned to a release: the reference has no version, so repositories follow `main`. A breaking change gets a new preset path. Renovate on GitLab instances needs a GitHub token to read the preset.
 
@@ -198,7 +198,7 @@ Unlike synced content, the preset is not pinned to a release: the reference has 
 
 ## Tool
 
-The tool's code is the class library `src/RepoBaseline` (namespace `Chaos.RepoBaseline`). Its entry point is the file-based app `tool/sync.cs`, run with `dotnet run`, which references the project and locates the `repo-baseline` checkout through its own path. The tool has three commands:
+The tool is the .NET tool `Chaos.RepoBaseline` with the command `repo-baseline`, built from the project `src/RepoBaseline` (namespace `Chaos.RepoBaseline`). Repositories pin its version in their tool manifest, `dotnet-tools.json`, and run it with `dotnet repo-baseline` in the repository root. The tool has three commands:
 
 | Command | Effect |
 |---|---|
@@ -210,7 +210,7 @@ All three commands exit with `0` on success, `1` when `check` has findings, and 
 
 ### `init`
 
-`init` takes the version to record in the manifest and the inputs from the layout guide: the name, the project type, the forge with the repository URL, and the target frameworks. It derives the profiles from the project type and the forge: `common`, `dotnet`, `dotnet-nuget` for published libraries, then `github` or `gitlab`. `--private` leaves out the `LICENSE`. `--ref` reads the content of another ref, as for `sync`, but `init` still records the given version, so a repository can be set up before its release is tagged.
+`init` takes the version to record in the manifest and the inputs from the layout guide: the name, the project type, the forge with the repository URL, and the target frameworks. It derives the profiles from the project type and the forge: `common`, `dotnet`, `dotnet-nuget` for published libraries, then `github` or `gitlab`. `--private` leaves out the `LICENSE`. `--checkout` and `--ref` read the content of a local checkout, as for `sync`, but `init` still records the given version, so a repository can be set up before its release is tagged.
 
 Templates for created-once files may contain placeholders; `init` fills them once. This does not contradict rule 1, because the repository owns these files from then on. Placeholders have the form `{{<Placeholder>}}`; any other `{{` in a template is a source error.
 
@@ -223,6 +223,7 @@ Templates for created-once files may contain placeholders; `init` fills them onc
 | `{{TargetFrameworkProperties}}` | `TargetFramework` for one target framework; for several, `LatestTarget` (the highest version), `MainTargets` and `TargetFrameworks` as in the layout guide |
 | `{{SourceLinkGitLabHost}}` | A `SourceLinkGitLabHost` item for a GitLab host other than `gitlab.com` (BLD-6); otherwise nothing |
 | `{{LicenseNotice}}` | The MIT sentence of the `file_header_template`, as an escaped continuation (`\n…`); nothing with `--private` |
+| `{{ToolVersion}}` | The version of the tool that runs `init`, without build metadata. The `dotnet-tools.json` template pins the tool with it. |
 
 A placeholder on a line of its own takes the line's indentation for every line of its value, and the line is removed when the value is empty.
 
@@ -232,18 +233,29 @@ A file whose name differs only in case from a file `init` writes, such as `NuGet
 
 `sync` and `check` apply the same rule to synced files and block targets. `sync` renames a file that exists only under another case to its name and then writes it, and writes nothing when several such files exist. `check` reports such a file as `<path>: exists only as <names>`. Names are compared exactly, so `check` reports a case variant on case-insensitive file systems as well. A block target that no selected profile uses is found only by its exact name.
 
-**Adopting an existing repository:** run `init` to add the missing files, then `sync` to update the synced files and blocks that `init` skipped. An existing `<Name>.slnx.DotSettings` does not get the layer injection automatically, and existing `Directory.Build.props` files do not get the imports of the synced `.props` files; `check` reports both until they are added by hand.
+A repository has no tool manifest before `init`, so `init` runs with `dnx Chaos.RepoBaseline init …`, which needs the .NET 10 SDK or later. The `dotnet-tools.json` that `init` creates pins the tool.
+
+**Adopting an existing repository:** run `init` to add the missing files, then `sync` to update the synced files and blocks that `init` skipped. An existing `<Name>.slnx.DotSettings` does not get the layer injection automatically, and existing `Directory.Build.props` files do not get the imports of the synced `.props` files; `check` reports both until they are added by hand. `init` also skips an existing `dotnet-tools.json`, so the repository adds the tool to it with `dotnet tool install Chaos.RepoBaseline`.
 
 ### Versions and distribution
 
-Releases are Git tags (`v1.0.0`, …). The tool reads the profile content of the pinned tag from the Git objects of the `repo-baseline` checkout it runs from, so the checkout does not have to be at that tag. `--ref <git-ref>` reads the content of any other ref instead, for development and for pilots before a release; it never changes the manifest.
+The tool and the profile content have separate versions, so a tool fix needs no profile release, and a profile release needs no tool release.
 
-- **Locally:** run the tool from a clone of `repo-baseline`, passing the target repository's path.
-- **In CI:** a shallow clone of the pinned tag (`git clone --depth 1 --branch v<version>`) followed by `check`. The repository is public, so this works from GitHub and from GitLab.
+- **Tool:** the .NET tool `Chaos.RepoBaseline` on nuget.org, published from `tool/v<version>` tags. A repository pins it in `dotnet-tools.json`, and Renovate's `nuget` manager proposes its updates.
+- **Profiles:** the release tags `v<version>`. A repository pins one in the `version` of `.repo-baseline.json`, and the custom manager of the shared Renovate preset proposes its updates. Such a pull request changes only the version, so `check` fails on it until `sync` runs on its branch.
 
-Every tag after `v0.4.0` is also published as a GitHub release with two assets: `profiles.tar.gz`, which holds the tracked files of `profiles/`, the `LICENSE` and a `release.json` with the profile version and a format version, and `profiles.tar.gz.sha256`. The release workflow runs the CI checks on the tagged commit and publishes the archive that this run packed with `tool/pack-profiles.sh`; versions `0.x` and versions with a pre-release suffix become GitHub pre-releases, and the annotated tag's message becomes the release notes. The archive is deterministic, so the same commit always gives the same bytes and checksum. The tool still reads the tags; reading the archive instead is the next step towards distributing the tool separately.
+Every profile tag after `v0.4.0` is published as a GitHub release with two assets: `profiles.tar.gz`, which holds the tracked files of `profiles/`, the `LICENSE` and a `release.json`, and `profiles.tar.gz.sha256`. The release workflow runs the CI checks on the tagged commit and publishes the archive that this run packed with `tool/pack-profiles.sh`; versions `0.x` and versions with a pre-release suffix become GitHub pre-releases, and the annotated tag's message becomes the release notes. The archive is deterministic, so the same commit always gives the same bytes and checksum. The preset's custom manager does not ignore GitHub pre-releases, so `0.x` releases get update pull requests, too.
 
-The clone and the working directory must be outside the target repository. `dotnet run` reads `global.json` from the working directory and `Directory.Build.props`, `Directory.Packages.props` and `NuGet.config` from the directories above `tool/sync.cs`, so the target's build settings would otherwise apply to the tool.
+`release.json` holds a format version, the profile version and, from format 2 on, the minimum tool version that can read the profiles. The minimum comes from `tool/minimum-tool-version`; the maintainer raises it when the profiles need a newer tool, such as a new placeholder. The tool refuses a release that needs a newer tool or has a format it does not know, and names the required version when the release states it. Format 1 archives have no minimum.
+
+The tool downloads both assets of the pinned version, verifies the archive against the checksum, and caches the verified archive with its checksum file in a directory per version. The cache is in `REPO_BASELINE_CACHE`, or else in `$XDG_CACHE_HOME/repo-baseline` or `~/.cache/repo-baseline` on Unix and in `%LOCALAPPDATA%\repo-baseline\cache` on Windows. A cached archive is verified on every use and downloaded again when it does not match. When the cache cannot be written, the tool warns and uses the verified download. The tool reads the archive in memory, without extracting it, and validates its profiles as it validates those of a Git checkout. The checksum detects corrupt or partial downloads; that a published release cannot change is ensured by GitHub's immutable releases. Releases up to `v0.4.0` have no archive.
+
+`--checkout <path>` reads the profile content of the pinned tag from the Git objects of a local `repo-baseline` checkout instead, so the checkout does not have to be at that tag. `--ref <git-ref>` reads any ref of that checkout, for development and for pilots before a release; it never changes the manifest. Git is needed only for `--checkout`.
+
+- **Locally and in CI:** `dotnet tool restore`, then `dotnet repo-baseline sync .` or `dotnet repo-baseline check .` in the repository root, the same on GitHub and GitLab. The tool needs the .NET 10 SDK or later, because `dotnet tool restore` and local tools are SDK commands, also in repositories that do not use .NET otherwise. The profiles target .NET repositories, so this requirement is accepted.
+- **Developing the tool:** `dotnet run --project src/RepoBaseline -- <command> <path> --checkout .` in a `repo-baseline` checkout outside the target repository. `dotnet run` reads `global.json` from the working directory, so the target's settings would otherwise apply to the build. A development build has the version `0.0.0-dev` and cannot read release archives that need a released tool, so it uses `--checkout`.
+
+The first tool version is `0.1.0`, the initial minimum of `tool/minimum-tool-version`. Until it is on nuget.org, no profile release is tagged, and existing repositories keep running the tool from a clone of their pinned release.
 
 ## Rollout
 
@@ -255,6 +267,5 @@ The clone and the working directory must be outside the target repository. `dotn
 
 ## Open Questions
 
-- **Distribution as a .NET tool:** packaging the tool together with the profile content as a .NET tool would let Renovate propose baseline updates through the tool manifest. It would require a .NET SDK in non-.NET repositories, so it is postponed until the first version has been tried.
 - **Automatic pull and merge requests:** worthwhile once more than a handful of repositories have adopted the baseline.
 - **Shared testing guidelines:** deferred (TST-2 in `decisions.md`).

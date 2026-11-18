@@ -5,12 +5,13 @@ namespace Chaos.RepoBaseline;
 using System.Globalization;
 using System.Text.RegularExpressions;
 
-internal sealed record Options(String Command, String TargetPath, String? Version, String? Ref, InitOptions? Init)
+internal sealed record Options(String Command, String TargetPath, String? Version, String? Checkout, String? Ref, InitOptions? Init)
 {
     public const String InitCommand = "init";
     public const String SyncCommand = "sync";
     public const String CheckCommand = "check";
 
+    private const String CheckoutOption = "--checkout";
     private const String RefOption = "--ref";
     private static readonly String[] InitValueOptions = ["--name", "--type", "--forge", "--repository-url", "--target-frameworks"];
     private static readonly String[] InitFlags = ["--private", "--force"];
@@ -29,7 +30,7 @@ internal sealed record Options(String Command, String TargetPath, String? Versio
                 throw new UsageException($"Unknown option '{argument}'.");
             }
 
-            if ((name == RefOption) || InitValueOptions.Contains(name))
+            if (name is RefOption or CheckoutOption || InitValueOptions.Contains(name))
             {
                 if (values.ContainsKey(name))
                 {
@@ -61,6 +62,17 @@ internal sealed record Options(String Command, String TargetPath, String? Versio
         if ((gitRef is not null) && ((gitRef.Length == 0) || gitRef.StartsWith('-')))
         {
             throw new UsageException($"'{gitRef}' is not a valid Git ref.");
+        }
+
+        var checkout = values.GetValueOrDefault(CheckoutOption);
+        if ((checkout is not null) && String.IsNullOrWhiteSpace(checkout))
+        {
+            throw new UsageException("--checkout needs the path of a repo-baseline checkout.");
+        }
+
+        if ((gitRef is not null) && (checkout is null))
+        {
+            throw new UsageException("--ref reads a Git ref of a repo-baseline checkout and needs --checkout <path>.");
         }
 
         if (positional.Count == 0)
@@ -95,7 +107,7 @@ internal sealed record Options(String Command, String TargetPath, String? Versio
         {
             // The manifest needs a version even when the content comes from --ref, so init accepts both.
             return new Options(command, positional[1], version ?? throw new UsageException("init needs the version to record in the manifest."),
-                               gitRef, InitOptions.Parse(values, flags));
+                               checkout, gitRef, InitOptions.Parse(values, flags));
         }
 
         if ((version is not null) && (gitRef is not null))
@@ -103,7 +115,7 @@ internal sealed record Options(String Command, String TargetPath, String? Versio
             throw new UsageException("<version> and --ref cannot be combined.");
         }
 
-        return new Options(command, positional[1], version, gitRef, Init: null);
+        return new Options(command, positional[1], version, checkout, gitRef, Init: null);
     }
 
     private static String NormalizeVersion(String value)

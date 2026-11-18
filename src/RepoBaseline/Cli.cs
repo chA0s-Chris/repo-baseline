@@ -28,22 +28,25 @@ public static class Cli
 {
     private const String Usage = """
         Usage:
-          dotnet run tool/sync.cs -- init  <path> <version> --name <Name> --type application|library
-                                           --forge github|gitlab --repository-url <url>
-                                           --target-frameworks <tfm>[;<tfm>...] [--private] [--force]
-                                           [--ref <git-ref>]
-          dotnet run tool/sync.cs -- sync  <path> [<version>] [--ref <git-ref>]
-          dotnet run tool/sync.cs -- check <path> [--ref <git-ref>]
+          dotnet repo-baseline init  <path> <version> --name <Name> --type application|library
+                                     --forge github|gitlab --repository-url <url>
+                                     --target-frameworks <tfm>[;<tfm>...] [--private] [--force]
+                                     [--checkout <path> [--ref <git-ref>]]
+          dotnet repo-baseline sync  <path> [<version>] [--checkout <path> [--ref <git-ref>]]
+          dotnet repo-baseline check <path> [--checkout <path> [--ref <git-ref>]]
 
-        init   sets up a repository: writes the manifest for release <version>, the synced content and
-               the created-once files from the templates, and a strong-name key for libraries.
-               It skips existing files and lists them; --force overwrites them, except a key.
-               --private leaves out the LICENSE.
-        sync   writes the synced content of the release pinned in <path>/.repo-baseline.json.
-               With <version>, it syncs that release and records it in the manifest.
-        check  reports synced content that differs from the pinned release.
-        --ref  reads the profile content of any Git ref of this repo-baseline checkout instead.
-               init still records <version> in the manifest.
+        init        sets up a repository: writes the manifest for release <version>, the synced content and
+                    the created-once files from the templates, and a strong-name key for libraries.
+                    It skips existing files and lists them; --force overwrites them, except a key.
+                    --private leaves out the LICENSE.
+        sync        writes the synced content of the release pinned in <path>/.repo-baseline.json.
+                    With <version>, it syncs that release and records it in the manifest.
+        check       reports synced content that differs from the pinned release.
+
+        The profiles of a release are downloaded from its GitHub release and cached per version in
+        REPO_BASELINE_CACHE, or in the user's cache directory.
+        --checkout  reads the profiles of the release from the Git tags of a repo-baseline checkout instead.
+        --ref       reads the profiles of any Git ref of that checkout. init still records <version>.
 
         Exit codes: 0 success, 1 check findings, 2 usage, manifest or source errors.
         """;
@@ -63,11 +66,11 @@ public static class Cli
             if (options.Init is { } init)
             {
                 var version = options.Version ?? throw new UsageException("init needs the version to record in the manifest.");
-                return InitCommand.Run(target, version, init, LoadSource(options.Ref, version));
+                return InitCommand.Run(target, version, init, LoadSource(options, version));
             }
 
             var manifest = Manifest.Load(target);
-            var source = LoadSource(options.Ref, options.Version ?? manifest.Version);
+            var source = LoadSource(options, options.Version ?? manifest.Version);
             var expected = ExpectedContent.Compose(source, manifest.Profiles);
 
             return options.Command == Options.SyncCommand
@@ -96,12 +99,17 @@ public static class Cli
         }
     }
 
-    private static ReleaseSource LoadSource(String? gitRef, String version)
+    private static ReleaseSource LoadSource(Options options, String version)
     {
-        var checkout = BaselineCheckout.Locate();
-        return gitRef is not null
-            ? ReleaseSource.Load(checkout, gitRef, label: gitRef, kind: "ref")
-            : ReleaseSource.Load(checkout, $"refs/tags/v{version}", label: $"v{version}", kind: "tag");
+        if (options.Checkout is null)
+        {
+            return ArchiveSource.Load(ReleaseArchives.CreateDefault().Get(version), version, ToolVersion.Current);
+        }
+
+        var checkout = BaselineCheckout.Resolve(options.Checkout);
+        return options.Ref is { } gitRef
+            ? GitSource.Load(checkout, gitRef, label: gitRef, kind: "ref")
+            : GitSource.Load(checkout, $"refs/tags/v{version}", label: $"v{version}", kind: "tag");
     }
 
     private static String ResolveTarget(String path)

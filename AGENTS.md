@@ -13,11 +13,11 @@ Read `docs/design.md` before changing anything; it describes profiles, the kinds
 | `docs/layout-dotnet.md` | The standard layout of a .NET repository that uses the `dotnet` profile |
 | `ai-plans/` | Guided Coding plans and plan deviation files |
 | `profiles/` | Profile content: one directory per profile with synced files, block fragments and created-once templates, as described under "Profile storage" in `docs/design.md` |
-| `src/RepoBaseline/` | The tool's code: a class library with the `init`, `sync` and `check` commands, described under "Tool" in `docs/design.md` |
-| `tool/sync.cs` | The tool's entry point: a file-based app that references `src/RepoBaseline` |
+| `src/RepoBaseline/` | The tool: the .NET tool `Chaos.RepoBaseline` with the `init`, `sync` and `check` commands, described under "Tool" in `docs/design.md` |
 | `tool/pack-profiles.sh` | Packs the archive of a profile release, described under "Versions and distribution" in `docs/design.md` |
+| `tool/minimum-tool-version` | The oldest tool version that can read the profiles, written into each profile release |
 | `tests/scripts/` | Tests for the shared code-style scripts |
-| `tests/tool/` | Tests for the tool, run through its entry point |
+| `tests/tool/` | Tests for the tool, run as a built tool and as a packed .NET tool |
 | `tests/RepoBaseline.Tests/` | Unit tests for the tool's code |
 | `tests/release/` | Tests for `tool/pack-profiles.sh` |
 | `RepoBaseline.slnx` | The solution with the tool's project and its unit tests |
@@ -35,13 +35,13 @@ Read `docs/design.md` before changing anything; it describes profiles, the kinds
 | Test the tool | `bash tests/tool/run.sh` |
 | Test the release packing | `bash tests/release/run.sh` |
 | Pack a profile release | `bash tool/pack-profiles.sh <version> <output-directory>` |
-| Set up a repository | `dotnet run tool/sync.cs -- init <path> <version> --name <Name> --type application\|library --forge github\|gitlab --repository-url <url> --target-frameworks <tfm>[;<tfm>…]`, optionally with `--private`, `--force` and `--ref <git-ref>` |
-| Sync or check a repository | `dotnet run tool/sync.cs -- sync <path>` or `… check <path>`, optionally with `--ref <git-ref>` |
+| Set up a repository with the profiles of this checkout | `dotnet run --project src/RepoBaseline -- init <path> <version> --name <Name> --type application\|library --forge github\|gitlab --repository-url <url> --target-frameworks <tfm>[;<tfm>…] --checkout .`, optionally with `--private`, `--force` and `--ref <git-ref>` |
+| Sync or check a repository with the profiles of this checkout | `dotnet run --project src/RepoBaseline -- sync <path> --checkout .` or `… check <path> --checkout .`, optionally with `--ref <git-ref>` |
 | Validate the Renovate preset and configuration | `npx --yes --package renovate@44.181.5 -- renovate-config-validator --strict --no-global renovate/default.json renovate.json` |
 
 The script tests need bash, Git and `jq`. They run the scripts against a stub `dotnet`, so they cover argument handling, file selection and report filtering, but not ReSharper itself.
 
-The tool needs Git and the .NET 10 SDK or later; its tests also need bash. The tests build fixture `repo-baseline` repositories with a copy of the tool and their own profiles and templates under `tmp/`, so changes to the real profiles do not affect them. Run the tool from this repository, not from inside the target repository.
+The tool needs the .NET 10 SDK or later to build, and Git for `--checkout`; its tests also need bash, GNU `tar`, `gzip` and `sha256sum`. The tests build fixture `repo-baseline` repositories with their own profiles and templates under `tmp/`, so changes to the real profiles do not affect them. They run the tool with `--checkout`, read fixture release archives from a cache directory and install the packed tool from a local package source; no test downloads anything. Run the tool with `dotnet run` from this repository, not from inside the target repository, because `dotnet run` reads the `global.json` of the working directory. Without `--checkout`, the tool downloads the profile release from GitHub; a development build has the version `0.0.0-dev` and cannot read releases that need a released tool.
 
 The projects set their own build settings. Do not add a `Directory.Build.props` or `Directory.Packages.props` to the repository root: it would also apply to the fixtures under `tmp/`. Warnings are errors only with `-p:TreatWarningsAsErrors=true`, as in CI, so that a new compiler warning never stops the tool in a repository that runs it.
 
@@ -52,6 +52,8 @@ The release tests need bash, Git, GNU `tar`, `gzip` and `sha256sum`.
 CI runs the unit tests, the three test suites and the validation with these commands, checks the workflows with `actionlint`, and packs the profile release archive as a workflow artifact, with the version `0.0.0-dev.<short commit>`. Keep the workflow and this table in sync.
 
 ## Publishing a Profile Release
+
+When the profiles need a newer tool, such as for a new template placeholder, the maintainer raises `tool/minimum-tool-version` to the first tool version that supports them, and publishes that tool version first. No profile release is tagged before the tool version in `tool/minimum-tool-version` is on nuget.org.
 
 The maintainer creates a signed, annotated tag `v<version>` on `main`, with the release notes as its message, and pushes it with an explicit refspec (`git push origin refs/tags/v<version>`). The release workflow stops unless the tag is `v` followed by a valid version, runs the CI checks on the tagged commit, and publishes the archive and its checksum as a GitHub release. Versions `0.x` and versions with a pre-release suffix become pre-releases. Agents do not create or push tags unless the maintainer asks for it.
 

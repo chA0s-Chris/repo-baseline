@@ -78,7 +78,7 @@ Decisions referenced as `CS-…`, `BLD-…` and so on are recorded in [decisions
 | `CODESTYLE.md` | synced | Human-readable code style. Repository-specific code style rules go into `AGENTS.md` or a nested `AGENTS.md`. |
 | `cleanup_code.sh` | synced | Applies the `Zorn` cleanup profile to changed, staged and untracked files, or with `--all` to all files of the same types in the solution. Both modes leave Razor and plain XML files out (TOOL-1). |
 | `inspect_code.sh` | synced | Runs ReSharper inspections on changed files, on a branch (`--base`), or on the whole solution (`--all`). Its warnings and errors are what needs fixing; suggestions are ignored (CS-11). Suppressed inspection IDs come from `.repo-baseline.json`, so the script needs `jq`. |
-| `dotnet-tools.json` | created once | In the root for SDK 10 or later, in `.config/dotnet-tools.json` for older SDKs (BLD-5). Contains at least `jetbrains.resharper.globaltools` and `dotnet-coverage`. Repositories add further tools such as `dotnet-ef`. |
+| `dotnet-tools.json` | created once | In the root for SDK 10 or later, in `.config/dotnet-tools.json` for older SDKs (BLD-5). Contains at least `chaos.repobaseline`, the tool of this baseline, `jetbrains.resharper.globaltools` and `dotnet-coverage`. Repositories add further tools such as `dotnet-ef`. |
 
 ### Agent instructions
 
@@ -214,7 +214,7 @@ Required inputs:
 
 Steps:
 
-1. Run `init` with these inputs and the `repo-baseline` version (see the README). It selects the profiles `common`, `dotnet`, `dotnet-nuget` for published libraries, and `github` or `gitlab`. It writes all synced and created-once files, including an empty `<Name>.slnx`, generates the strong-name key for libraries, and adds `.idea/` and the key's file name to the local part of `.gitignore`. A private repository gets no `LICENSE`, and its file header does not mention the MIT license.
+1. Run `init` with `dnx Chaos.RepoBaseline`, these inputs and the `repo-baseline` version (see the README). It selects the profiles `common`, `dotnet`, `dotnet-nuget` for published libraries, and `github` or `gitlab`. It writes all synced and created-once files, including an empty `<Name>.slnx`, generates the strong-name key for libraries, and adds `.idea/` and the key's file name to the local part of `.gitignore`. A private repository gets no `LICENSE`, and its file header does not mention the MIT license.
 2. Create the projects in `src/` and `tests/` and add them to the existing `<Name>.slnx` with `dotnet sln <Name>.slnx add`.
 3. Fill in the local parts: project description and structure in `AGENTS.md`, the project overview in `src/AGENTS.md`, package metadata in `src/Directory.Build.props`, and the package versions in `Directory.Packages.props`.
 4. Add `build/` and the CI workflow if needed. For published libraries, store the Base64-encoded strong-name key as a CI secret.
