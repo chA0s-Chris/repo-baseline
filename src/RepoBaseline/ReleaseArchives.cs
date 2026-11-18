@@ -90,6 +90,7 @@ internal sealed class ReleaseArchives
     }
 
     // A cached archive is verified on every use: an interrupted copy or a damaged disk must not reach a repository.
+    // The cache is optional, so a file that cannot be read, such as one another user wrote, is a cache miss.
     private static Byte[]? TryReadCached(String directory)
     {
         var archivePath = Path.Combine(directory, ArchiveName);
@@ -99,9 +100,16 @@ internal sealed class ReleaseArchives
             return null;
         }
 
-        var expected = ParseChecksum(File.ReadAllBytes(checksumPath));
-        var archive = File.ReadAllBytes(archivePath);
-        return (expected is not null) && CryptographicOperations.FixedTimeEquals(SHA256.HashData(archive), expected) ? archive : null;
+        try
+        {
+            var expected = ParseChecksum(File.ReadAllBytes(checksumPath));
+            var archive = File.ReadAllBytes(archivePath);
+            return (expected is not null) && CryptographicOperations.FixedTimeEquals(SHA256.HashData(archive), expected) ? archive : null;
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            return null;
+        }
     }
 
     // Written to a temporary file and renamed, so that a concurrent run never reads a partial file.

@@ -43,6 +43,31 @@ public class ReleaseArchivesTests
     }
 
     [Test]
+    public void Get_DownloadsAgainWhenCachedArchiveCannotBeRead()
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            Assert.Ignore("Unix file modes make the file unreadable.");
+            return;
+        }
+
+        Serve("1.0.0", Archive);
+        Archives().Get("1.0.0");
+        var cached = Path.Combine(_cache.FullName, "1.0.0", "profiles.tar.gz");
+        File.SetUnixFileMode(cached, UnixFileMode.None);
+        if (CanRead(cached))
+        {
+            Assert.Ignore("The user can read files without read permission, as root can.");
+        }
+
+        _handler.Requests.Clear();
+
+        Archives().Get("1.0.0").Should().Equal(Archive);
+
+        _handler.Requests.Should().HaveCount(2);
+    }
+
+    [Test]
     public void Get_DownloadsFromTheReleaseOfTheVersion()
     {
         Serve("1.0.0", Archive);
@@ -134,6 +159,19 @@ public class ReleaseArchivesTests
     public void ParseChecksum_RejectsOtherContent(String suffix)
     {
         ReleaseArchives.ParseChecksum(Encoding.UTF8.GetBytes(Convert.ToHexStringLower(SHA256.HashData(Archive)) + suffix)).Should().BeNull();
+    }
+
+    private static Boolean CanRead(String path)
+    {
+        try
+        {
+            File.ReadAllBytes(path);
+            return true;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return false;
+        }
     }
 
     private static String Checksum(Byte[] content) => $"{Convert.ToHexStringLower(SHA256.HashData(content))}  profiles.tar.gz\n";
