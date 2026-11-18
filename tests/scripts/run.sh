@@ -39,6 +39,9 @@ for tool in bash git grep sort sed paste mkdir dirname rm awk cp cat; do
 done
 ln -s "${WORK}/bin/dotnet" "${WORK}/nojq/dotnet"
 
+# The masks `cleanup_code.sh --all` passes: the file types scoped cleanup selects, without Razor or plain XML.
+ALL_PATTERNS="**/*.cs;**/*.csproj;**/*.json;**/*.sh;**/*.slnx;**/*.config;**/*.props;**/*.targets;**/*.nuspec"
+
 FAILURES=0
 TESTS=0
 CURRENT=""
@@ -166,19 +169,21 @@ expect_status 0
 expect_output "No matching files to process."
 expect_no_call
 
-test_case "cleanup: --all cleans the whole solution"
+test_case "cleanup: --all cleans the same file types in the whole solution"
 new_repo Sample.slnx
 echo c > Untracked.cs
+echo r > Page.razor
+echo x > data.xml
 run ./cleanup_code.sh --all
 expect_status 0
-expect_call "jb cleanupcode --profile=Zorn --verbosity=ERROR Sample.slnx"
+expect_call "jb cleanupcode --profile=Zorn --verbosity=ERROR --include=${ALL_PATTERNS} Sample.slnx"
 
 test_case "cleanup: runs from a subdirectory"
 new_repo Sample.slnx
 mkdir -p src
 run bash -c "cd src && ../cleanup_code.sh --all"
 expect_status 0
-expect_call "jb cleanupcode --profile=Zorn --verbosity=ERROR Sample.slnx"
+expect_call "jb cleanupcode --profile=Zorn --verbosity=ERROR --include=${ALL_PATTERNS} Sample.slnx"
 
 test_case "inspect: fails without jq"
 new_repo Sample.slnx

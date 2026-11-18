@@ -10,11 +10,11 @@ The goal is that both modes of `cleanup_code.sh` clean the same file types and d
 
 ## Acceptance Criteria
 
-- [ ] `./cleanup_code.sh --all` limits `cleanupcode` to the file types that scoped cleanup selects, so Razor and plain `.xml` files are not cleaned.
-- [ ] `cleanup_code.sh` defines the file types once, and both modes use that definition.
-- [ ] The script tests expect the `--all` call to include exactly the masks of the shared file types (`**/*.cs;…;**/*.nuspec`), so no Razor or plain `.xml` mask.
-- [ ] A manual run of `./cleanup_code.sh --all` with the ReSharper CLI, on a solution with a C# file and a Razor component that both need cleanup, changes the C# file and leaves the component unchanged.
-- [ ] TOOL-1 in `docs/decisions.md`, the cleanup paragraph of `profiles/dotnet/blocks/agents-code-style-and-inspections.md` and the `cleanup_code.sh` row in `docs/layout-dotnet.md` describe the new `--all` selection.
+- [x] `./cleanup_code.sh --all` limits `cleanupcode` to the file types that scoped cleanup selects, so Razor and plain `.xml` files are not cleaned.
+- [x] `cleanup_code.sh` defines the file types once, and both modes use that definition.
+- [x] The script tests expect the `--all` call to include exactly the masks of the shared file types (`**/*.cs;…;**/*.nuspec`), so no Razor or plain `.xml` mask.
+- [x] A manual run of `./cleanup_code.sh --all` with the ReSharper CLI, on a solution with a C# file and a Razor component that both need cleanup, changes the C# file and leaves the component unchanged.
+- [x] TOOL-1 in `docs/decisions.md`, the cleanup paragraph of `profiles/dotnet/blocks/agents-code-style-and-inspections.md` and the `cleanup_code.sh` row in `docs/layout-dotnet.md` describe the new `--all` selection.
 
 ## Technical Details
 
