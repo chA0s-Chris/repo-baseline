@@ -1,0 +1,33 @@
+name: Update release drafts
+
+# Keeps one release-drafter draft per release stream up to date: vNext for the profiles and tool/vNext for the tool.
+# The release workflows render the notes of a release from the same configurations.
+on:
+  push:
+    branches: [ "main" ]
+
+permissions: {}
+
+# Only the newest push matters; a draft update that is still running is replaced.
+concurrency:
+  group: update-release-drafts
+  cancel-in-progress: true
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: read
+    # The same exact release-drafter version as the release workflows, so that the drafts and the published notes
+    # match.
+    steps:
+      - name: Update the profile draft
+        uses: release-drafter/release-drafter@v7.11.0
+        with:
+          config-name: release-drafter-profiles.yml
+
+      - name: Update the tool draft
+        uses: release-drafter/release-drafter@v7.11.0
+        with:
+          config-name: release-drafter-tool.yml

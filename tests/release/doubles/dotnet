@@ -1,0 +1,50 @@
+#!/usr/bin/env bash
+# Test double for "dotnet nuget push" against the fake flat container in $DOUBLE_STATE/web, which the curl double serves.
+#
+# A fake package file contains "<id> <version>". With --skip-duplicate, a package that exists counts as pushed, like the
+# real client reports it. An accepted package gets a nuspec with the commit in DOUBLE_PACKED_COMMIT (default:
+# GITHUB_SHA) and stays hidden for DOUBLE_INDEX_DELAY requests (default: 0). DOUBLE_DOTNET_FAIL_PUSH=1 fails the push.
+set -euo pipefail
+
+{
+    printf 'dotnet'
+    printf ' %q' "$@"
+    printf '\n'
+} >>"$DOUBLE_CALLS"
+
+[[ ${1-} == nuget && ${2-} == push ]] || { printf 'dotnet double: unsupported call\n' >&2; exit 2; }
+
+file="$3"
+source_url=""
+skip_duplicate=false
+previous=""
+for argument in "$@"; do
+    [[ $argument != --skip-duplicate ]] || skip_duplicate=true
+    [[ $previous != --source ]] || source_url="$argument"
+    previous="$argument"
+done
+
+read -r id version <"$file"
+nuspec="$DOUBLE_STATE/web/v3-flatcontainer/${id,,}/${version,,}/${id,,}.nuspec"
+
+printf "Pushing %s to '%s'...\n" "$(basename "$file")" "$source_url"
+
+if [[ -f $nuspec ]]; then
+    if [[ $skip_duplicate == true ]]; then
+        printf "Package '%s' already exists at feed '%s'.\n" "$file" "$source_url"
+        exit 0
+    fi
+    printf 'error: Response status code does not indicate success: 409 (Conflict).\n' >&2
+    exit 1
+fi
+
+if [[ -n ${DOUBLE_DOTNET_FAIL_PUSH:-} ]]; then
+    printf 'error: Response status code does not indicate success: 503 (Service Unavailable).\n' >&2
+    exit 1
+fi
+
+mkdir -p "$(dirname "$nuspec")"
+printf '<?xml version="1.0" encoding="utf-8"?>\n<package><metadata><id>%s</id><version>%s</version><repository type="git" url="https://github.com/chA0s-Chris/repo-baseline" commit="%s" /></metadata></package>\n' \
+    "$id" "$version" "${DOUBLE_PACKED_COMMIT:-$GITHUB_SHA}" >"$nuspec"
+printf '%s\n' "${DOUBLE_INDEX_DELAY:-0}" >"$nuspec.hidden"
+printf 'Your package was pushed.\n'

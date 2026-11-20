@@ -74,16 +74,6 @@
       ]
     },
     {
-      "description": "Profile releases 0.x are GitHub pre-releases, which Renovate would otherwise skip",
-      "matchDatasources": [
-        "github-releases"
-      ],
-      "matchPackageNames": [
-        "chA0s-Chris/repo-baseline"
-      ],
-      "ignoreUnstable": false
-    },
-    {
       "groupName": "GitHub Actions",
       "matchManagers": [
         "github-actions"
