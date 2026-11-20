@@ -20,6 +20,12 @@ WORK="${ROOT}/tmp/tool-tests"
 BASELINE="${WORK}/baseline"
 CACHE="${WORK}/cache"
 
+# CI passes the tool package that it packed; see the test "packed tool".
+if [ -n "${TOOL_PACKAGE_DIR:-}${TOOL_PACKAGE_VERSION:-}" ] && { [ -z "${TOOL_PACKAGE_DIR:-}" ] || [ -z "${TOOL_PACKAGE_VERSION:-}" ]; }; then
+    echo "Set both TOOL_PACKAGE_DIR and TOOL_PACKAGE_VERSION, or neither." >&2
+    exit 2
+fi
+
 rm -rf "${WORK}"
 mkdir -p "${WORK}"
 
@@ -1061,23 +1067,32 @@ expect_status 2
 expect_output "error: ${NOT_A_CHECKOUT} is not inside a usable Git checkout of repo-baseline:"
 
 # A smoke test of the README's CI snippet: the packed tool, restored through a tool manifest from a local package
-# source, run in the target repository. The target's own build files do not reach the tool. The packages go to their
-# own folder, because NuGet would otherwise reuse a package of an earlier run with the same version.
+# source, run in the target repository. The target's own build files do not reach the tool. CI passes the package it
+# packed, which the release workflows publish, in TOOL_PACKAGE_DIR and its version in TOOL_PACKAGE_VERSION. Without
+# them, the test packs the tool with the version 0.0.0-dev into its own folder, because NuGet would otherwise reuse a
+# package of an earlier run with the same version.
 test_case "packed tool: restores through a tool manifest and syncs and checks the target it runs in"
-PACKAGES="${WORK}/packages"
-if ! pack_log=$(dotnet pack "${ROOT}/src/RepoBaseline/RepoBaseline.csproj" -o "${PACKAGES}" 2>&1); then
-    echo "Packing the tool failed:"
-    echo "${pack_log}"
-    exit 1
+if [ -n "${TOOL_PACKAGE_DIR:-}" ]; then
+    PACKAGES="$(cd "${TOOL_PACKAGE_DIR}" && pwd)"
+    PACKAGE_VERSION="${TOOL_PACKAGE_VERSION}"
+else
+    PACKAGES="${WORK}/packages"
+    PACKAGE_VERSION=0.0.0-dev
+    if ! pack_log=$(dotnet pack "${ROOT}/src/RepoBaseline/RepoBaseline.csproj" -o "${PACKAGES}" 2>&1); then
+        echo "Packing the tool failed:"
+        echo "${pack_log}"
+        exit 1
+    fi
 fi
 new_target '["base", "extra"]' 1.1.0
 write "${TARGET}/Directory.Build.props" 'This would break any build that imports it.'
 write "${TARGET}/nuget.config" '<?xml version="1.0" encoding="utf-8"?>' '<configuration>' '  <packageSources>' '    <clear />' \
     "    <add key=\"local\" value=\"${PACKAGES}\" />" '  </packageSources>' '</configuration>'
 write "${TARGET}/dotnet-tools.json" '{' '  "version": 1,' '  "isRoot": true,' '  "tools": {' '    "chaos.repobaseline": {' \
-    '      "version": "0.0.0-dev",' '      "commands": [ "repo-baseline" ],' '      "rollForward": false' '    }' '  }' '}'
+    "      \"version\": \"${PACKAGE_VERSION}\"," '      "commands": [ "repo-baseline" ],' '      "rollForward": false' '    }' '  }' '}'
 set +e
-OUTPUT=$(cd "${TARGET}" && export NUGET_PACKAGES="${WORK}/nuget-packages" REPO_BASELINE_CACHE="${CACHE}" \
+# The CLI caches tool executable paths by version, even when the package source changes.
+OUTPUT=$(cd "${TARGET}" && export DOTNET_CLI_HOME="${WORK}/cli-home" NUGET_PACKAGES="${WORK}/nuget-packages" REPO_BASELINE_CACHE="${CACHE}" \
     && { dotnet tool restore && dotnet repo-baseline sync . && dotnet repo-baseline check .; } 2>&1)
 STATUS=$?
 set -e

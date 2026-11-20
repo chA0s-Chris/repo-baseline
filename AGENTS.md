@@ -16,15 +16,19 @@ Read `docs/design.md` before changing anything; it describes profiles, the kinds
 | `src/RepoBaseline/` | The tool: the .NET tool `Chaos.RepoBaseline` with the `init`, `sync` and `check` commands, described under "Tool" in `docs/design.md` |
 | `tool/pack-profiles.sh` | Packs the archive of a profile release, described under "Versions and distribution" in `docs/design.md` |
 | `tool/minimum-tool-version` | The oldest tool version that can read the profiles, written into each profile release |
+| `tool/release/` | The release scripts that both release workflows run, described under "Publishing a Release" |
 | `tests/scripts/` | Tests for the shared code-style scripts |
 | `tests/tool/` | Tests for the tool, run as a built tool and as a packed .NET tool |
 | `tests/RepoBaseline.Tests/` | Unit tests for the tool's code |
-| `tests/release/` | Tests for `tool/pack-profiles.sh` |
+| `tests/release/` | Tests for `tool/pack-profiles.sh` and the release scripts |
 | `RepoBaseline.slnx` | The solution with the tool's project and its unit tests |
 | `renovate/default.json` | The shared Renovate preset, described under "Renovate preset" in `docs/design.md` |
 | `renovate.json` | This repository's own Renovate configuration: the shared preset, limited to GitHub Actions |
-| `.github/workflows/ci.yml` | CI: runs the commands below on pull requests and pushes to `main`, and packs the profile release archive |
-| `.github/workflows/release-profiles.yml` | Publishes a profile release for a pushed `v*` tag |
+| `.github/workflows/ci.yml` | CI: runs the commands below on pull requests and pushes to `main`, and packs the profile release archive and the tool |
+| `.github/workflows/release-profiles.yml` | Publishes a profile release; started manually with the version |
+| `.github/workflows/release-tool.yml` | Publishes a tool release to nuget.org; started manually with the version |
+| `.github/workflows/update-release-drafts.yml` | Keeps the release-drafter drafts of both release streams up to date |
+| `.github/release-drafter-profiles.yml`, `.github/release-drafter-tool.yml` | The release-drafter configurations of the two release streams |
 
 ## Local Development Commands
 
@@ -33,7 +37,7 @@ Read `docs/design.md` before changing anything; it describes profiles, the kinds
 | Build the tool and run its unit tests | `dotnet test RepoBaseline.slnx -p:TreatWarningsAsErrors=true` |
 | Test the shared code-style scripts | `bash tests/scripts/run.sh` |
 | Test the tool | `bash tests/tool/run.sh` |
-| Test the release packing | `bash tests/release/run.sh` |
+| Test the release packing and the release scripts | `bash tests/release/run.sh` |
 | Pack a profile release | `bash tool/pack-profiles.sh <version> <output-directory>` |
 | Set up a repository with the profiles of this checkout | `dotnet run --project src/RepoBaseline -- init <path> <version> --name <Name> --type application\|library --forge github\|gitlab --repository-url <url> --target-frameworks <tfm>[;<tfm>…] --checkout .`, optionally with `--private`, `--force` and `--ref <git-ref>` |
 | Sync or check a repository with the profiles of this checkout | `dotnet run --project src/RepoBaseline -- sync <path> --checkout .` or `… check <path> --checkout .`, optionally with `--ref <git-ref>` |
@@ -47,15 +51,23 @@ The projects set their own build settings. Do not add a `Directory.Build.props` 
 
 The preset validator needs Node.js; `npx` downloads the pinned Renovate version. Keep `--no-global`, which validates the files as repository configuration instead of self-hosted configuration.
 
-The release tests need bash, Git, GNU `tar`, `gzip` and `sha256sum`.
+The release tests need bash, Git, `jq`, GNU `tar`, `gzip` and `sha256sum`. They run the release scripts against stubs of `git`, `gh`, `curl` and `dotnet` with a local bare repository as `origin`, so they need no network access.
 
-CI runs the unit tests, the three test suites and the validation with these commands, checks the workflows with `actionlint`, and packs the profile release archive as a workflow artifact, with the version `0.0.0-dev.<short commit>`. Keep the workflow and this table in sync.
+CI runs the unit tests, the three test suites and the validation with these commands, checks the workflows with `actionlint`, and packs the profile release archive and the tool as workflow artifacts, with the versions `0.0.0-dev.<short commit>` and `0.0.0-dev.g<short commit>`. The packed-tool test runs against that tool package, which CI passes in `TOOL_PACKAGE_DIR` and `TOOL_PACKAGE_VERSION`; without them, the test packs the tool itself. Keep the workflow and this table in sync.
 
-## Publishing a Profile Release
+## Publishing a Release
 
-When the profiles need a newer tool, such as for a new template placeholder, the maintainer raises `tool/minimum-tool-version` to the first tool version that supports them, and publishes that tool version first. No profile release is tagged before the tool version in `tool/minimum-tool-version` is on nuget.org.
+The tool and the profiles are released by two workflows of the same shape, "Release tool" (`release-tool.yml`) and "Release profiles" (`release-profiles.yml`). The maintainer starts one on `main` with the version, without a leading `v`, such as `0.1.0`. The workflow:
 
-The maintainer creates a signed, annotated tag `v<version>` on `main`, with the release notes as its message, and pushes it with an explicit refspec (`git push origin refs/tags/v<version>`). The release workflow stops unless the tag is `v` followed by a valid version, runs the CI checks on the tagged commit, and publishes the archive and its checksum as a GitHub release. Versions `0.x` and versions with a pre-release suffix become pre-releases. Agents do not create or push tags unless the maintainer asks for it.
+1. Stops unless it runs on `main`, the version is SemVer 2.0.0 without build metadata, and Git accepts the tag name. It also stops when the tag, the GitHub release or the nuget.org package already exists for another commit. The profile workflow also stops unless nuget.org lists the tool version in `tool/minimum-tool-version`.
+2. Runs the CI checks of `ci.yml` on the commit and publishes what this CI run packed and tested: the tool package on nuget.org, or the profile archive and its checksum as release assets.
+3. Creates the annotated tag, `tool/v<version>` or `v<version>`, on the commit, and then the GitHub release. The release notes come from the release-drafter configuration of the stream. When preparing a new release for a stream with no published stable release, set `from` to the tag or commit from which to list changes. For example, use `v0.5.0` to list profile changes since that prerelease.
+
+Only versions with a pre-release suffix, such as `0.8.0-preview.1`, become GitHub pre-releases. Pre-releases and tool releases are never marked as the latest release, so "Latest" always points to a stable profile release. A run that fails partway is completed by re-running its failed jobs or by starting the workflow again for the same commit; nothing that was published is replaced.
+
+When the profiles need a newer tool, such as for a new template placeholder, the maintainer raises `tool/minimum-tool-version` to the first tool version that supports them, and releases that tool version first. nuget.org lists a new version a few minutes after the push, so a profile release right after a tool release may need to be started again.
+
+The release scripts are in `tool/release/`; the workflows pass every input through the environment. nuget.org trusts `release-tool.yml` and the GitHub environment `nuget` through trusted publishing, so renaming the workflow file breaks publishing. Agents do not create or push tags or start a release unless the maintainer asks for it.
 
 ## Rules for This Repository
 

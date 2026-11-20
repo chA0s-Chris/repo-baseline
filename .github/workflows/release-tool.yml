@@ -1,0 +1,151 @@
+name: Release tool
+
+# The maintainer starts this workflow on main with the version to release, such as 0.1.0. It checks the version and the
+# commit, runs the CI checks, pushes the package that this CI run packed and tested to nuget.org, and then creates the
+# annotated tag tool/v<version> and a GitHub release without assets. A run that fails partway is completed by
+# re-running its failed jobs or by starting it again for the same commit. The scripts in tool/release/ do the work;
+# tests/release/run.sh covers them.
+#
+# nuget.org trusts this workflow by its file name and the environment nuget; renaming the file breaks publishing.
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: The SemVer 2.0.0 version to release, without a leading v, such as 0.1.0 or 0.2.0-preview.1
+        required: true
+        type: string
+      from:
+        description: Tag or commit to list changes from. Required when the stream has no published stable release.
+        required: false
+        type: string
+
+permissions: {}
+
+# A fixed group, so that two tool releases never run at once. It differs from the group that ci.yml computes.
+concurrency:
+  group: release-tool
+  cancel-in-progress: false
+
+# The input reaches the scripts only through the environment.
+env:
+  STREAM: tool
+  VERSION: ${{ inputs.version }}
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Check the ref and the version
+        id: validate
+        run: bash tool/release/validate.sh
+
+      - name: Check existing tags, releases and packages
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: bash tool/release/preflight.sh
+
+      # The exact version, as in update-release-drafts.yml: release-notes.sh refuses notes by the wording of this
+      # version's warning about a missing previous release, which another version may change.
+      - name: Render the release notes
+        id: drafter
+        uses: release-drafter/release-drafter@v7.11.0
+        with:
+          config-name: release-drafter-tool.yml
+          tag: ${{ steps.validate.outputs.tag }}
+          name: ${{ steps.validate.outputs.tag }}
+          commitish: ${{ github.sha }}
+          from: ${{ inputs.from }}
+          dry-run: true
+
+      - name: Write the release notes
+        env:
+          DRAFTED_BODY: ${{ steps.drafter.outputs.body }}
+          NOTES_FILE: release-notes/body.md
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: bash tool/release/release-notes.sh
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: release-notes
+          path: release-notes/
+          if-no-files-found: error
+          overwrite: true
+
+  # A called workflow cannot get more permissions than its calling job.
+  ci:
+    needs: prepare
+    permissions:
+      contents: read
+    uses: ./.github/workflows/ci.yml
+    with:
+      tool-version: ${{ inputs.version }}
+
+  publish:
+    needs: [ prepare, ci ]
+    runs-on: ubuntu-latest
+    environment: nuget
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Download the tool package
+        uses: actions/download-artifact@v8
+        with:
+          name: tool
+          path: artifacts/tool
+
+      # Trusted publishing exchanges the OIDC token for a short-lived nuget.org key. The nuget.org account chAos-Chris
+      # (letter O) owns the package; it differs from the GitHub account chA0s-Chris.
+      - name: Log in to nuget.org
+        id: nuget-login
+        uses: NuGet/login@v1
+        with:
+          user: chAos-Chris
+
+      - name: Push to nuget.org
+        env:
+          NUGET_KEY: ${{ steps.nuget-login.outputs.NUGET_API_KEY }}
+          PACKAGE_DIR: artifacts/tool
+        run: bash tool/release/publish.sh
+
+  release:
+    needs: [ prepare, publish ]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Download the release notes
+        uses: actions/download-artifact@v8
+        with:
+          name: release-notes
+          path: release-notes
+
+      - name: Wait until nuget.org serves the package of this commit
+        run: bash tool/release/verify-published.sh
+
+      - name: Tag and publish the GitHub release
+        env:
+          NOTES_FILE: release-notes/body.md
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: bash tool/release/release.sh

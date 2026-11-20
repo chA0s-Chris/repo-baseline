@@ -5,15 +5,20 @@ on:
     branches: [ "main" ]
   pull_request:
     branches: [ "main" ]
-  # The profile release workflow runs exactly these checks and publishes the archive this run packs.
+  # The release workflows run exactly these checks and publish the archive or the package that this run packs.
   workflow_call:
     inputs:
       version:
         description: The profile version to pack; empty packs 0.0.0-dev.<short commit>.
         type: string
         default: ""
+      tool-version:
+        description: The tool version to pack; empty packs 0.0.0-dev.g<short commit>.
+        type: string
+        default: ""
 
-# A new push to a pull request cancels its run that is still in progress; runs on main always finish.
+# A new push to a pull request cancels its run that is still in progress; runs on main always finish. When a release
+# workflow calls this one, github.workflow is the caller's name, so this group differs from the caller's fixed group.
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
@@ -44,7 +49,21 @@ jobs:
       - name: Build and run the unit tests
         run: dotnet test RepoBaseline.slnx -p:TreatWarningsAsErrors=true
 
+      # The packed-tool test runs against this package, which the tool's release workflow publishes. The g, as in
+      # git describe, keeps the identifier valid SemVer when the short commit has only digits and starts with 0.
+      - name: Pack the tool
+        id: pack-tool
+        env:
+          TOOL_VERSION: ${{ inputs.tool-version }}
+        run: |
+          version="${TOOL_VERSION:-0.0.0-dev.g$(git rev-parse --short HEAD)}"
+          dotnet pack src/RepoBaseline/RepoBaseline.csproj -o artifacts/tool -p:Version="${version}" -p:TreatWarningsAsErrors=true
+          echo "version=${version}" >> "${GITHUB_OUTPUT}"
+
       - name: Test the tool
+        env:
+          TOOL_PACKAGE_DIR: artifacts/tool
+          TOOL_PACKAGE_VERSION: ${{ steps.pack-tool.outputs.version }}
         run: bash tests/tool/run.sh
 
       - name: Test the shared code-style scripts
@@ -66,4 +85,11 @@ jobs:
         with:
           name: profiles
           path: artifacts/profiles/
+          if-no-files-found: error
+
+      - name: Upload the tool package
+        uses: actions/upload-artifact@v7
+        with:
+          name: tool
+          path: artifacts/tool/
           if-no-files-found: error

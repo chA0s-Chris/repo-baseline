@@ -1,0 +1,39 @@
+# Tool releases: tags tool/v<version>, pull requests that change src/RepoBaseline/.
+# release-drafter considers only releases whose tag starts with tag-prefix, both for the draft it updates and for the
+# previous release, so the two streams do not mix. Pre-releases never count as the previous release
+# (include-pre-releases keeps its default, false).
+name-template: 'tool/vNext'
+tag-template: 'tool/vNext'
+tag-prefix: 'tool/v'
+
+change-template: '- $TITLE (#$NUMBER) by @$AUTHOR'
+change-title-escapes: '\<*_&'
+no-changes-template: '- No changes since the last release'
+category-template: '### $TITLE'
+
+exclude-contributors:
+  - 'renovate[bot]'
+
+# Only the pre-include category selects the pull requests of this stream. The label categories only group them; a pull
+# request without these labels is listed under "Other changes". A pull request that changes the directories of both
+# streams appears in both.
+categories:
+  - type: 'pre-include'
+    when:
+      paths:
+        - 'src/RepoBaseline/**'
+
+  - title: 'Features'
+    when:
+      labels:
+        - 'enhancement'
+
+  - title: 'Bug fixes'
+    when:
+      labels:
+        - 'bug'
+
+  - title: 'Other changes'
+
+template: |
+  $CHANGES

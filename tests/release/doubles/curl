@@ -1,0 +1,59 @@
+#!/usr/bin/env bash
+# Test double for curl that serves the fake nuget.org flat container in $DOUBLE_STATE/web.
+#
+# The URL https://nuget.test/<path> is the file $DOUBLE_STATE/web/<path>. Next to it, an optional <path>.status holds a
+# fixed HTTP status, and an optional <path>.hidden counts the requests that still answer 404 because nuget.org has not
+# indexed the package yet. DOUBLE_CURL_FAIL=1 makes curl fail without an answer.
+set -euo pipefail
+
+{
+    printf 'curl'
+    printf ' %q' "$@"
+    printf '\n'
+} >>"$DOUBLE_CALLS"
+
+output=""
+url=""
+
+while (($# > 0)); do
+    case "$1" in
+        --output) output="$2"; shift ;;
+        --write-out) shift ;;
+        http://* | https://*) url="$1" ;;
+    esac
+    shift
+done
+
+[[ -n $url && -n $output ]] || { printf 'curl double: unsupported call\n' >&2; exit 2; }
+[[ $url == https://nuget.test/* ]] || { printf 'curl double: unexpected URL %s\n' "$url" >&2; exit 2; }
+
+if [[ -n ${DOUBLE_CURL_FAIL:-} ]]; then
+    printf 'curl: (6) Could not resolve host: nuget.test\n' >&2
+    exit 6
+fi
+
+file="$DOUBLE_STATE/web/${url#https://nuget.test/}"
+
+if [[ -f $file.status ]]; then
+    : >"$output"
+    printf '%s' "$(<"$file.status")"
+    exit 0
+fi
+
+if [[ -f $file.hidden ]]; then
+    hidden="$(<"$file.hidden")"
+    if ((hidden > 0)); then
+        printf '%s\n' "$((hidden - 1))" >"$file.hidden"
+        printf 'BlobNotFound' >"$output"
+        printf '404'
+        exit 0
+    fi
+fi
+
+if [[ -f $file ]]; then
+    cp "$file" "$output"
+    printf '200'
+else
+    printf 'BlobNotFound' >"$output"
+    printf '404'
+fi

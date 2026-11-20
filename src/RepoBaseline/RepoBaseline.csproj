@@ -11,7 +11,8 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
 
-  <!-- The .NET tool. The release workflow of the tool sets the version from its tool/v* tag. -->
+  <!-- The .NET tool. CI packs it with the version 0.0.0-dev.g<short commit>, and the tool's release workflow with the
+       version it releases. -->
   <PropertyGroup>
     <PackAsTool>true</PackAsTool>
     <ToolCommandName>repo-baseline</ToolCommandName>
@@ -23,7 +24,15 @@
     <PackageProjectUrl>https://github.com/chA0s-Chris/repo-baseline</PackageProjectUrl>
     <RepositoryUrl>https://github.com/chA0s-Chris/repo-baseline</RepositoryUrl>
     <PackageTags>repository;baseline;editorconfig;resharper;sync</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <!-- Records the repository and the commit in the package, so that the release workflow can check which commit a
+         published version was built from. -->
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
   </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="/" />
+  </ItemGroup>
 
   <ItemGroup>
     <InternalsVisibleTo Include="Chaos.RepoBaseline.Tests" />
