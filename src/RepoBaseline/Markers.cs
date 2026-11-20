@@ -13,6 +13,10 @@ internal sealed record MarkerSyntax(String Prefix, String Suffix, Boolean Fenced
     private static readonly MarkerSyntax Html = new("<!-- ", " -->", Fenced: true);
     private static readonly Regex MarkerWords = new(@"\b(BEGIN|END)\s+repo-baseline\s*:", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
 
+    // The complete sentence, so that a local comment that merely starts the same way never counts as a header.
+    private static readonly Regex WholeFileHeader = new(@"^Managed by repo-baseline \([^\s()]+\)\. Do not edit; change it there\.$",
+                                                        RegexOptions.CultureInvariant);
+
     public static MarkerSyntax? ForFile(String path) =>
         Path.GetFileName(path) switch
         {
@@ -20,6 +24,22 @@ internal sealed record MarkerSyntax(String Prefix, String Suffix, Boolean Fenced
             var name when name.EndsWith(".md", StringComparison.Ordinal) => Html,
             _ => null
         };
+
+    /// <summary>
+    /// Whether <paramref name="line"/> is the header of a synced whole file in this comment syntax, with any URL. A file that
+    /// starts with it was a synced whole file before it became a block target.
+    /// </summary>
+    public Boolean IsWholeFileHeader(String line)
+    {
+        var text = line.TrimEnd();
+        if (!text.StartsWith(Prefix, StringComparison.Ordinal) || !text.EndsWith(Suffix, StringComparison.Ordinal)
+                                                               || (text.Length < Prefix.Length + Suffix.Length))
+        {
+            return false;
+        }
+
+        return WholeFileHeader.IsMatch(text[Prefix.Length..^Suffix.Length]);
+    }
 
     public String Begin(String id) => $"{Prefix}BEGIN repo-baseline: {id}{Suffix}";
 

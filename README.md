@@ -28,9 +28,9 @@ The tool and the profile content have separate versions: `dotnet-tools.json` pin
 | Command | Effect |
 | --- | --- |
 | `dotnet repo-baseline init <path> <version> --name <Name> …` | Sets up a repository: writes the manifest for `<version>`, the synced content, the created-once files from the templates and, for libraries, a strong-name key. See [Setting up a repository](#setting-up-a-repository). |
-| `dotnet repo-baseline sync <path>` | Writes the synced content of the release pinned in `<path>/.repo-baseline.json`. A synced file or block target that exists only under another case, such as `agents.md` for `AGENTS.md`, is renamed to its name first. |
+| `dotnet repo-baseline sync <path>` | Writes the synced content of the release pinned in `<path>/.repo-baseline.json`. A synced file or block target that exists only under another case, such as `agents.md` for `AGENTS.md`, is renamed to its name first. A block target that is still the synced file of an earlier release, such as a `CODESTYLE.md` from before it had a block, is replaced with its blocks. |
 | `dotnet repo-baseline sync <path> <version>` | Syncs release `<version>` and records it in the manifest. |
-| `dotnet repo-baseline check <path>` | Lists every place where synced content differs from the pinned release, a managed block is missing, unknown or malformed, a synced file or block target exists only under another case, a synced file is not a regular file inside the repository, a managed file is not valid UTF-8, the ReSharper settings do not use the shared layer, a synced `.props` file is not imported by its build file, or a shared package has no version. |
+| `dotnet repo-baseline check <path>` | Lists every place where synced content differs from the pinned release, a managed block is missing, unknown or malformed, a block target is still the synced file of an earlier release, a synced file or block target exists only under another case, a synced file is not a regular file inside the repository, a managed file is not valid UTF-8, the ReSharper settings do not use the shared layer, a synced `.props` file is not imported by its build file, or a shared package has no version. |
 
 `check` exits with `1` when it has findings. All commands exit with `2` on usage, manifest and source errors, and when a release cannot be downloaded, does not match its checksum or needs a newer tool. `sync` also exits with `2` and writes nothing when a block target file has malformed block markers, when a file the selected profiles use is not valid UTF-8, or when such a file has a symbolic link, a directory or a file in its path where the tool needs a regular file.
 
@@ -96,6 +96,8 @@ The job needs the .NET 10 SDK or later, not only the runtime, and access to `git
 ### Updating to a new release
 
 The shared Renovate preset proposes new profile releases in `.repo-baseline.json`, and Renovate's `nuget` manager proposes new tool versions in `dotnet-tools.json`. A profile update changes only the version, so `check` fails on it until the synced content is updated: run `dotnet repo-baseline sync .` on the pull request's branch, review the result and push it. Without Renovate, `dotnet repo-baseline sync . <version>` updates the content and the manifest in one step.
+
+A profile release can need a newer tool. The tool then refuses the release and names the version it needs, so merge the tool update in `dotnet-tools.json` before the profile update.
 
 ### Editing shared ReSharper settings
 

@@ -37,6 +37,9 @@ write() {
     printf '%s\n' "$@" > "${path}"
 }
 
+# The header of a synced whole file, as the real profiles write it; the fixture whole files do not use it.
+WHOLE_FILE_HEADER='Managed by repo-baseline (https://example.invalid/repo-baseline). Do not edit; change it there.'
+
 # Copies the script that packs release archives into a fixture checkout, with a minimum tool version that the
 # tool under test, a development build with the version 0.0.0-dev, meets.
 copy_packer() {
@@ -148,6 +151,19 @@ build_baseline() {
     fixture_ref normalization-collision normalization_pair "${profiles}"
     fixture_ref latin1-path latin1_file "${profiles}/base/files/docs/$(printf 'x\xe4').md"
     fixture_ref unclosed-fence write "${profiles}/base/blocks/notes.md" '## Notes' '' '```markdown'
+
+    # docs/GUIDE.md as a synced whole file with the header, and as a block target with a start and an end block.
+    fixture_ref guide-header write "${profiles}/base/files/docs/GUIDE.md" "<!-- ${WHOLE_FILE_HEADER} -->" '' 'Guide with header.'
+    fixture_ref guide-block guide_block "${profiles}"
+}
+
+# Turns the whole file docs/GUIDE.md of the base profile into a block target.
+guide_block() {
+    rm "$1/base/files/docs/GUIDE.md"
+    sed -i 's|^  "blocks": \[$|&\n    { "id": "guide", "file": "docs/GUIDE.md", "source": "blocks/guide.md", "position": "start" },\n    { "id": "guide-notes", "file": "docs/GUIDE.md", "source": "blocks/guide-notes.md", "position": "end" },|' \
+        "$1/base/profile.json"
+    write "$1/base/blocks/guide.md" '## Guide'
+    write "$1/base/blocks/guide-notes.md" 'Guide notes.'
 }
 
 # A profile whose block targets a file type without a block marker syntax.
@@ -951,6 +967,106 @@ run_tool sync "${TARGET}" 1.1.0 --ref main
 expect_status 2
 expect_output "<version> and --ref cannot be combined."
 
+test_case "check and sync: a former synced file is replaced with its blocks, and local content added later stays"
+new_target '["base"]'
+run_tool sync "${TARGET}" --ref guide-header
+expect_status 0
+expect_file docs/GUIDE.md "<!-- ${WHOLE_FILE_HEADER} -->" '' 'Guide with header.'
+run_tool check "${TARGET}" --ref guide-block
+expect_status 1
+expect_output "docs/GUIDE.md: still the synced file of an earlier release; run sync to replace it with its blocks"
+expect_no_output "block guide: missing"
+run_tool sync "${TARGET}" --ref guide-block
+expect_status 0
+expect_output "docs/GUIDE.md: replaced, it was a synced file"
+expect_file docs/GUIDE.md '<!-- BEGIN repo-baseline: guide -->' '## Guide' '<!-- END repo-baseline: guide -->' '' \
+    '<!-- BEGIN repo-baseline: guide-notes -->' 'Guide notes.' '<!-- END repo-baseline: guide-notes -->'
+run_tool check "${TARGET}" --ref guide-block
+expect_status 0
+write "${TARGET}/docs/GUIDE.md" '<!-- BEGIN repo-baseline: guide -->' '## Guide' '<!-- END repo-baseline: guide -->' '' \
+    '### Local Rules' '' 'Local rule.' '' '<!-- BEGIN repo-baseline: guide-notes -->' 'Guide notes.' '<!-- END repo-baseline: guide-notes -->'
+cp "${TARGET}/docs/GUIDE.md" "${WORK}/expected-${TESTS}"
+run_tool sync "${TARGET}" --ref guide-block
+expect_status 0
+cmp -s "${WORK}/expected-${TESTS}" "${TARGET}/docs/GUIDE.md" || fail "expected the local rule to stay"
+run_tool check "${TARGET}" --ref guide-block
+expect_status 0
+
+test_case "check and sync: only a complete header on the first line makes a former synced file"
+new_target '["base"]'
+for content in 'Local guide.' '<!-- Managed by repo-baseline. -->' "# Local guide|<!-- ${WHOLE_FILE_HEADER} -->"; do
+    IFS='|' read -r -a lines <<< "${content}"
+    write "${TARGET}/docs/GUIDE.md" "${lines[@]}"
+    run_tool check "${TARGET}" --ref guide-block
+    expect_status 1
+    expect_output "docs/GUIDE.md: block guide: missing"
+    expect_no_output "still the synced file"
+    run_tool sync "${TARGET}" --ref guide-block
+    expect_status 0
+    expect_file docs/GUIDE.md '<!-- BEGIN repo-baseline: guide -->' '## Guide' '<!-- END repo-baseline: guide -->' '' "${lines[@]}" '' \
+        '<!-- BEGIN repo-baseline: guide-notes -->' 'Guide notes.' '<!-- END repo-baseline: guide-notes -->'
+done
+
+test_case "check and sync: an open fence in a former synced file is replaced, markers hidden by it still stop sync"
+new_target '["base"]'
+write "${TARGET}/docs/GUIDE.md" "<!-- ${WHOLE_FILE_HEADER} -->" '' '```' 'Open until the end.'
+run_tool check "${TARGET}" --ref guide-block
+expect_status 1
+expect_output "docs/GUIDE.md: still the synced file of an earlier release; run sync to replace it with its blocks"
+expect_no_output "opens a code fence"
+run_tool sync "${TARGET}" --ref guide-block
+expect_status 0
+expect_output "docs/GUIDE.md: replaced, it was a synced file"
+run_tool check "${TARGET}" --ref guide-block
+expect_status 0
+write "${TARGET}/docs/GUIDE.md" "<!-- ${WHOLE_FILE_HEADER} -->" '' '```' '<!-- BEGIN repo-baseline: guide -->'
+cp "${TARGET}/docs/GUIDE.md" "${WORK}/expected-${TESTS}"
+run_tool check "${TARGET}" --ref guide-block
+expect_status 1
+expect_output "docs/GUIDE.md: line 3 opens a code fence that is never closed, so block markers after it would be ignored"
+run_tool sync "${TARGET}" --ref guide-block
+expect_status 2
+expect_output "error: docs/GUIDE.md: line 3 opens a code fence that is never closed"
+cmp -s "${WORK}/expected-${TESTS}" "${TARGET}/docs/GUIDE.md" || fail "expected docs/GUIDE.md to be unchanged"
+
+test_case "check and sync: a malformed marker in a former synced file still stops sync"
+new_target '["base"]'
+write "${TARGET}/docs/GUIDE.md" "<!-- ${WHOLE_FILE_HEADER} -->" '<!-- BEGIN repo-baseline: guide -->' 'Guide with header.'
+cp "${TARGET}/docs/GUIDE.md" "${WORK}/expected-${TESTS}"
+run_tool check "${TARGET}" --ref guide-block
+expect_status 1
+expect_output "docs/GUIDE.md: block guide: BEGIN marker on line 2 has no END marker"
+expect_no_output "still the synced file"
+run_tool sync "${TARGET}" --ref guide-block
+expect_status 2
+expect_output "error: docs/GUIDE.md: block guide: BEGIN marker on line 2 has no END marker"
+cmp -s "${WORK}/expected-${TESTS}" "${TARGET}/docs/GUIDE.md" || fail "expected docs/GUIDE.md to be unchanged"
+
+test_case "check and sync: a former synced file whose block no selected profile defines stays as it is"
+new_target '["extra"]'
+write "${TARGET}/docs/GUIDE.md" "<!-- ${WHOLE_FILE_HEADER} -->" '' 'Guide with header.'
+run_tool sync "${TARGET}" --ref guide-block
+expect_status 0
+expect_file docs/GUIDE.md "<!-- ${WHOLE_FILE_HEADER} -->" '' 'Guide with header.'
+run_tool check "${TARGET}" --ref guide-block
+expect_status 0
+expect_no_output "docs/GUIDE.md"
+
+test_case "check and sync: a former synced file in another case is replaced and renamed"
+new_target '["base"]'
+write "${TARGET}/docs/guide.md" "<!-- ${WHOLE_FILE_HEADER} -->" '' 'Guide with header.'
+run_tool check "${TARGET}" --ref guide-block
+expect_status 1
+expect_output "docs/GUIDE.md: exists only as docs/guide.md"
+run_tool sync "${TARGET}" --ref guide-block
+expect_status 0
+expect_output "docs/GUIDE.md: replaced, it was a synced file, renamed from docs/guide.md"
+expect_no_file docs/guide.md
+expect_file docs/GUIDE.md '<!-- BEGIN repo-baseline: guide -->' '## Guide' '<!-- END repo-baseline: guide -->' '' \
+    '<!-- BEGIN repo-baseline: guide-notes -->' 'Guide notes.' '<!-- END repo-baseline: guide-notes -->'
+run_tool check "${TARGET}" --ref guide-block
+expect_status 0
+
 test_case "errors: usage, a missing tag or ref, an invalid manifest and an unknown profile"
 new_target '["base"]' 9.9.9
 run_tool check
@@ -1189,6 +1305,14 @@ build_init_baseline() {
     init_fixture_ref template-markers write "${profiles}/common/templates/.gitignore" '# BEGIN repo-baseline: gitignore' '.idea/'
     init_fixture_ref template-invalid-path write "${profiles}/dotnet/templates/docs." 'Dot.'
     init_fixture_ref gitignore-directory gitignore_directory "${profiles}"
+    init_fixture_ref claude-block claude_block "${profiles}"
+}
+
+# Turns the whole file CLAUDE.md, which has no template, into a block target.
+claude_block() {
+    rm "$1/common/files/CLAUDE.md"
+    sed -i 's|^  "blocks": \[$|&\n    { "id": "claude", "file": "CLAUDE.md", "source": "blocks/claude.md", "position": "start" },|' "$1/common/profile.json"
+    write "$1/common/blocks/claude.md" 'Read AGENTS.md.'
 }
 
 # Makes .gitignore neither a block target nor a template, and syncs a file below it, so that only the key's .gitignore
@@ -1543,6 +1667,20 @@ run_tool_from "${INIT_BASELINE}" check "${TARGET}"
 expect_status 2
 expect_output "tag v3.0.0 not found"
 
+test_case "init: --force replaces a former synced file without a template with its blocks"
+new_empty_target
+write "${TARGET}/CLAUDE.md" "<!-- ${WHOLE_FILE_HEADER} -->" '' 'Read AGENTS.md.'
+run_init 1.0.0 "${LIBRARY_ON_GITHUB[@]}" --ref claude-block
+expect_status 0
+grep -qx "  CLAUDE.md" <<< "${OUTPUT}" || fail "expected CLAUDE.md in the list of skipped files"
+expect_file CLAUDE.md "<!-- ${WHOLE_FILE_HEADER} -->" '' 'Read AGENTS.md.'
+run_init 1.0.0 "${LIBRARY_ON_GITHUB[@]}" --ref claude-block --force
+expect_status 0
+expect_output "CLAUDE.md: replaced, it was a synced file"
+expect_file CLAUDE.md '<!-- BEGIN repo-baseline: claude -->' 'Read AGENTS.md.' '<!-- END repo-baseline: claude -->'
+run_tool_from "${INIT_BASELINE}" check "${TARGET}" --ref claude-block
+expect_status 0
+
 test_case "errors: init inputs are validated"
 new_empty_target
 url=https://github.com/example/Sample
@@ -1624,6 +1762,28 @@ for type in application library; do
         expect_status 0
     done
 done
+
+test_case "real profiles: CODESTYLE.md is the shared block and a local section, and a former synced CODESTYLE.md is replaced"
+new_empty_target "-real-codestyle"
+run_tool_from "${REAL_BASELINE}" init "${TARGET}" 1.0.0 --ref main --name Sample.Project --type application --forge github \
+    --repository-url "https://github.com/example/Sample.Project" --target-frameworks net10.0
+expect_status 0
+mapfile -t shared < "${ROOT}/profiles/dotnet/blocks/codestyle.md"
+local_section=$(sed -n '4,$p' "${ROOT}/profiles/dotnet/templates/CODESTYLE.md")
+[[ "${local_section}" == "### Repository-Specific Rules"$'\n'* ]] || fail "expected the template's local section after the block markers"
+mapfile -t local_lines <<< "${local_section}"
+expect_file CODESTYLE.md '<!-- BEGIN repo-baseline: code-style -->' "${shared[@]}" '<!-- END repo-baseline: code-style -->' '' "${local_lines[@]}"
+write "${TARGET}/CODESTYLE.md" '<!-- Managed by repo-baseline (https://github.com/chA0s-Chris/repo-baseline). Do not edit; change it there. -->' '' \
+    "${shared[@]}"
+run_tool_from "${REAL_BASELINE}" check "${TARGET}" --ref main
+expect_status 1
+expect_output "CODESTYLE.md: still the synced file of an earlier release; run sync to replace it with its blocks"
+run_tool_from "${REAL_BASELINE}" sync "${TARGET}" --ref main
+expect_status 0
+expect_output "CODESTYLE.md: replaced, it was a synced file"
+expect_file CODESTYLE.md '<!-- BEGIN repo-baseline: code-style -->' "${shared[@]}" '<!-- END repo-baseline: code-style -->'
+run_tool_from "${REAL_BASELINE}" check "${TARGET}" --ref main
+expect_status 0
 
 echo
 if [ "${FAILURES}" -eq 0 ]; then

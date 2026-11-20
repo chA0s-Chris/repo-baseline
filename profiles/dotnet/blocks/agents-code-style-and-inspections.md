@@ -1,6 +1,6 @@
 ## Code Style and Inspections
 
-Follow `CODESTYLE.md`. The code-style scripts use the local tools from the tool manifest, so run `dotnet tool restore` after cloning or when the manifest changes.
+Follow `CODESTYLE.md`. Code style rules that apply to the whole repository go into a section `Repository-Specific Rules` of `CODESTYLE.md`, not into `AGENTS.md`; rules for one subtree only may go into a nested `AGENTS.md` there. The code-style scripts use the local tools from the tool manifest, so run `dotnet tool restore` after cloning or when the manifest changes.
 
 Run `./cleanup_code.sh` when a code change is complete. It applies ReSharper's `Zorn` profile to relevant files that Git reports as changed, staged, or untracked; `--all` applies it to files of the same types in the whole solution instead. Both modes leave Razor files out on purpose, because ReSharper's Razor cleanup does not apply the shared C# rules to them. Inspect the resulting diff, then run scoped inspections and the relevant build and test checks. Do not run cleanup during read-only reviews.
 

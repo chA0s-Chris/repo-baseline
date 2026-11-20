@@ -130,20 +130,27 @@ internal static class SyncCommand
             return null;
         }
 
-        var parsed = ParsedFile.Parse(TextFile.SplitLines(text), managed.Syntax);
-        var fileProblems = parsed.ProblemsFor(managed);
+        var lines = TextFile.SplitLines(text);
+        var parsed = ParsedFile.Parse(lines, managed.Syntax);
+
+        // A former synced file is replaced with its blocks; its old content cannot hide a block, so only the empty text is checked.
+        var replaced = parsed.IsFormerSyncedFile(lines, managed);
+        var mergeText = replaced ? String.Empty : text;
+        var mergeParsed = replaced ? ParsedFile.Parse([], managed.Syntax) : parsed;
+        var fileProblems = mergeParsed.ProblemsFor(managed);
         if (fileProblems.Count > 0)
         {
             problems.AddRange(fileProblems.Select(problem => $"{TextFile.Display(shown)}: {problem}"));
             return null;
         }
 
-        var merged = BlockMerger.Apply(text, parsed, managed);
+        var merged = BlockMerger.Apply(mergeText, mergeParsed, managed);
         var current = exists && (merged == text);
+        var change = replaced ? "replaced, it was a synced file" : exists ? "updated" : "created";
         if (variant is not null)
         {
             var renamed = $"renamed from {TextFile.Display(variant)}";
-            return new PendingWrite(path, current ? null : Encoding.UTF8.GetBytes(merged), Executable: null, current ? renamed : $"updated, {renamed}",
+            return new PendingWrite(path, current ? null : Encoding.UTF8.GetBytes(merged), Executable: null, current ? renamed : $"{change}, {renamed}",
                 RenamedFrom: readPath);
         }
 
@@ -153,7 +160,7 @@ internal static class SyncCommand
             return null;
         }
 
-        return new PendingWrite(path, Encoding.UTF8.GetBytes(merged), Executable: null, exists ? "updated" : "created");
+        return new PendingWrite(path, Encoding.UTF8.GetBytes(merged), Executable: null, change);
     }
 
     /// <summary>

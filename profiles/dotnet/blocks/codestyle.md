@@ -1,8 +1,8 @@
-<!-- Managed by repo-baseline (https://github.com/chA0s-Chris/repo-baseline). Do not edit; change it there. -->
-
 ## Code Style Guidelines
 
 The code style is configured in `.editorconfig` and `.repo-baseline/ReSharper.DotSettings`. This file describes it for people and agents.
+
+Rules that apply to this whole repository go into a section `Repository-Specific Rules` after the shared rules; rules for one subtree only may go into a nested `AGENTS.md` there. A repository rule that replaces a shared rule names the rule it replaces.
 
 ### General
 - Follow the [.NET Coding Conventions](https://learn.microsoft.com/en-us/dotnet/csharp/fundamentals/coding-style/coding-conventions)

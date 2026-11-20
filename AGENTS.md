@@ -24,6 +24,7 @@ Read `docs/design.md` before changing anything; it describes profiles, the kinds
 | `RepoBaseline.slnx` | The solution with the tool's project and its unit tests |
 | `renovate/default.json` | The shared Renovate preset, described under "Renovate preset" in `docs/design.md` |
 | `renovate.json` | This repository's own Renovate configuration: the shared preset, limited to GitHub Actions |
+| `.multi-agent.json` | The reviewer models of the multi-agent review skills |
 | `.github/workflows/ci.yml` | CI: runs the commands below on pull requests and pushes to `main`, and packs the profile release archive and the tool |
 | `.github/workflows/release-profiles.yml` | Publishes a profile release; started manually with the version |
 | `.github/workflows/release-tool.yml` | Publishes a tool release to nuget.org; started manually with the version |

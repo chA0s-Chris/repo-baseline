@@ -132,6 +132,14 @@ internal static class CheckCommand
 
         var lines = TextFile.SplitLines(text);
         var parsed = ParsedFile.Parse(lines, managed.Syntax);
+
+        // Before the fence condition of the problems: sync replaces the whole file, so an open fence in it cannot hide a block.
+        if (parsed.IsFormerSyncedFile(lines, managed))
+        {
+            findings.Add($"{managed.Path}: still the synced file of an earlier release; run sync to replace it with its blocks");
+            return;
+        }
+
         var problems = parsed.ProblemsFor(managed);
         if (problems.Count > 0)
         {

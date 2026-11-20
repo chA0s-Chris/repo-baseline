@@ -2,12 +2,88 @@
 // This file is licensed under the MIT license. See LICENSE in the project root for more information.
 namespace Chaos.RepoBaseline.Tests;
 
+using System.Text;
 using FluentAssertions;
 using NUnit.Framework;
 
 public class ParsedFileTests
 {
+    private const String Header = "Managed by repo-baseline (https://github.com/chA0s-Chris/repo-baseline). Do not edit; change it there.";
+
     private static readonly MarkerSyntax Markdown = MarkerSyntax.ForFile("AGENTS.md")!;
+
+    private static readonly ManagedFile CodeStyle = new("CODESTYLE.md", Markdown, [new ExpectedBlock("code-style", "## Code Style\n", BlockPosition.Start)]);
+
+    [Test]
+    public void IsFormerSyncedFile_AcceptsHeaderOnFirstLineInBothSyntaxes()
+    {
+        IsFormerSyncedFile(CodeStyle, $"<!-- {Header} -->\n\n## Code Style\n").Should().BeTrue();
+
+        var editorConfig = new ManagedFile(".editorconfig", MarkerSyntax.ForFile(".editorconfig")!,
+                                           [new ExpectedBlock("editorconfig", "root = true\n", BlockPosition.Start)]);
+        IsFormerSyncedFile(editorConfig, $"# {Header}\nroot = true\n").Should().BeTrue();
+    }
+
+    [Test]
+    public void IsFormerSyncedFile_AcceptsBomCrlfAndTrailingWhitespaceAfterDecoding()
+    {
+        Byte[] content = [0xEF, 0xBB, 0xBF, ..Encoding.UTF8.GetBytes($"<!-- {Header} -->  \r\n\r\n## Code Style\r\n")];
+
+        TextFile.TryDecode(content, out var text).Should().BeTrue();
+
+        IsFormerSyncedFile(CodeStyle, text).Should().BeTrue();
+    }
+
+    [TestCase("<!-- Managed by repo-baseline. -->")]
+    [TestCase("<!-- Managed by repo-baseline? See the notes below. -->")]
+    [TestCase("<!-- Managed by repo-baseline (). Do not edit; change it there. -->")]
+    [TestCase("<!-- Managed by repo-baseline (a b). Do not edit; change it there. -->")]
+    [TestCase("<!-- Managed by repo-baseline (a(b)). Do not edit; change it there. -->")]
+    [TestCase("<!-- Managed by repo-baseline (https://example.com). Do not edit; change it there. Really. -->")]
+    [TestCase("# Managed by repo-baseline (https://example.com). Do not edit; change it there.")]
+    [TestCase(" <!-- Managed by repo-baseline (https://example.com). Do not edit; change it there. -->")]
+    public void IsFormerSyncedFile_RejectsFirstLineThatIsNotTheCompleteHeader(String firstLine)
+    {
+        IsFormerSyncedFile(CodeStyle, $"{firstLine}\n## Code Style\n").Should().BeFalse();
+    }
+
+    [Test]
+    public void IsFormerSyncedFile_RejectsHeaderOnLaterLine()
+    {
+        IsFormerSyncedFile(CodeStyle, $"# Local rules\n<!-- {Header} -->\n").Should().BeFalse();
+    }
+
+    [Test]
+    public void IsFormerSyncedFile_RejectsHeaderTogetherWithBlockMarkers()
+    {
+        var text = $"<!-- {Header} -->\n<!-- BEGIN repo-baseline: code-style -->\n<!-- END repo-baseline: code-style -->\n";
+
+        IsFormerSyncedFile(CodeStyle, text).Should().BeFalse();
+    }
+
+    [Test]
+    public void IsFormerSyncedFile_RejectsHeaderWithMalformedMarker()
+    {
+        var text = $"<!-- {Header} -->\n<!-- BEGIN repo-baseline: code-style -->\n## Code Style\n";
+
+        IsFormerSyncedFile(CodeStyle, text).Should().BeFalse();
+    }
+
+    [Test]
+    public void IsFormerSyncedFile_RejectsHeaderWithMarkersHiddenByUnclosedFence()
+    {
+        var text = $"<!-- {Header} -->\n```\n<!-- BEGIN repo-baseline: code-style -->\n";
+
+        IsFormerSyncedFile(CodeStyle, text).Should().BeFalse();
+    }
+
+    [Test]
+    public void IsFormerSyncedFile_RejectsFileWithoutSelectedBlock()
+    {
+        var unused = CodeStyle with { Blocks = [] };
+
+        IsFormerSyncedFile(unused, $"<!-- {Header} -->\n").Should().BeFalse();
+    }
 
     [Test]
     public void Parse_FindsBlockBetweenMarkers()
@@ -40,5 +116,11 @@ public class ParsedFileTests
 
         parsed.Problems.Should().BeEmpty();
         parsed.Blocks.Should().BeEmpty();
+    }
+
+    private static Boolean IsFormerSyncedFile(ManagedFile managed, String text)
+    {
+        var lines = TextFile.SplitLines(text);
+        return ParsedFile.Parse(lines, managed.Syntax).IsFormerSyncedFile(lines, managed);
     }
 }
