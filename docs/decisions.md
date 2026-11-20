@@ -116,6 +116,14 @@ A reader sees the state and setup of a test class before its tests, and helpers 
 
 Cleanup does not insert a blank line after the XML declaration (`<?xml …?>`) in the MSBuild and XML files: the `.editorconfig` section for these files sets `xml_blank_line_after_pi = false`, while ReSharper's default inserts one. The templates write the declaration directly above the root element. A blank line that a file already has stays, so files in either form are unchanged.
 
+### CS-15: Repository-specific code style rules are part of `CODESTYLE.md`
+
+**Status:** Confirmed
+
+`CODESTYLE.md` has one shared block at the start. Code style rules that apply to the whole repository follow it in the section `Repository-Specific Rules`, not in `AGENTS.md`. Rules that apply only to one subtree, such as `tests/`, may go into a nested `AGENTS.md` there. A local rule adds a rule, or replaces a shared rule and names the rule it replaces.
+
+A reader of `CODESTYLE.md` should see every code style rule of the repository. While the whole file was synced, repositories had to put their own rules into `AGENTS.md`, and `CODESTYLE.md` no longer gave the whole picture. Naming the replaced rule keeps the file free of two rules that silently contradict each other. Repositories that synced `CODESTYLE.md` as a whole file get the block with the profile release that introduces it, and add the section when they have rules of their own, as described under "Managed blocks" in `design.md`.
+
 ## Build
 
 ### BLD-1: Warnings are errors in Release builds and CI

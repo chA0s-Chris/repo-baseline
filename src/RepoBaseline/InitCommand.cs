@@ -250,7 +250,17 @@ internal static class InitCommand
                 return;
             }
 
-            var parsed = ParsedFile.Parse(TextFile.SplitLines(text), managed.Syntax);
+            var lines = TextFile.SplitLines(text);
+            var parsed = ParsedFile.Parse(lines, managed.Syntax);
+
+            // Without a template, an existing former synced file is replaced with its blocks, as sync does.
+            var replaced = (template is null) && (existingPath is not null) && parsed.IsFormerSyncedFile(lines, managed);
+            if (replaced)
+            {
+                text = String.Empty;
+                parsed = ParsedFile.Parse([], managed.Syntax);
+            }
+
             var problems = parsed.ProblemsFor(managed);
             if (problems.Count > 0)
             {
@@ -259,7 +269,7 @@ internal static class InitCommand
                 return;
             }
 
-            var description = existingPath is null ? "created" : template is not null ? "overwritten" : "blocks merged";
+            var description = existingPath is null ? "created" : template is not null ? "overwritten" : replaced ? "replaced, it was a synced file" : "blocks merged";
             Writes.Add(Write(fullPath, existingPath, Encoding.UTF8.GetBytes(BlockMerger.Apply(text, parsed, managed)), template?.Executable, description));
         }
 

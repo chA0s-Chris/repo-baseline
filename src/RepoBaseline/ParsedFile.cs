@@ -24,6 +24,15 @@ internal sealed record ParsedFile(IReadOnlyList<ParsedBlock> Blocks, IReadOnlyLi
         return [..Problems, $"line {fenceLine + 1} opens a code fence that is never closed, so block markers after it would be ignored"];
     }
 
+    /// <summary>
+    /// Whether the file was a synced whole file before a release made it a block target: a selected profile defines a block for
+    /// it, it has no block markers, not even malformed or hidden ones, and its first line is the whole-file header.
+    /// <c>sync</c> replaces such a file with its blocks instead of inserting them above the old content.
+    /// </summary>
+    public Boolean IsFormerSyncedFile(IReadOnlyList<String> lines, ManagedFile managed) =>
+        (managed.Blocks.Count > 0) && (Blocks.Count == 0) && (Problems.Count == 0) && !MarkerAfterFence
+        && (lines.Count > 0) && managed.Syntax.IsWholeFileHeader(lines[0]);
+
     public static ParsedFile Parse(IReadOnlyList<String> lines, MarkerSyntax syntax)
     {
         var blocks = new List<ParsedBlock>();
