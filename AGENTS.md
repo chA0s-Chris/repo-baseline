@@ -28,7 +28,7 @@ Read `docs/design.md` before changing anything; it describes profiles, the kinds
 | `.github/workflows/ci.yml` | CI: runs the commands below on pull requests and pushes to `main`, and packs the profile release archive and the tool |
 | `.github/workflows/release-profiles.yml` | Publishes a profile release; started manually with the version |
 | `.github/workflows/release-tool.yml` | Publishes a tool release to nuget.org; started manually with the version |
-| `.github/workflows/update-release-drafts.yml` | Keeps the release-drafter drafts of both release streams up to date |
+| `.github/workflows/update-release-drafts.yml` | Keeps the release-drafter drafts of both release streams up to date: on every push to `main`, at the end of both release workflows, and when started manually on `main` |
 | `.github/release-drafter-profiles.yml`, `.github/release-drafter-tool.yml` | The release-drafter configurations of the two release streams |
 
 ## Local Development Commands
@@ -63,8 +63,11 @@ The tool and the profiles are released by two workflows of the same shape, "Rele
 1. Stops unless it runs on `main`, the version is SemVer 2.0.0 without build metadata, and Git accepts the tag name. It also stops when the tag, the GitHub release or the nuget.org package already exists for another commit. The profile workflow also stops unless nuget.org lists the tool version in `tool/minimum-tool-version`.
 2. Runs the CI checks of `ci.yml` on the commit and publishes what this CI run packed and tested: the tool package on nuget.org, or the profile archive and its checksum as release assets.
 3. Creates the annotated tag, `tool/v<version>` or `v<version>`, on the commit, and then the GitHub release. The release notes come from the release-drafter configuration of the stream. When preparing a new release for a stream with no published stable release, set `from` to the tag or commit from which to list changes. For example, use `v0.5.0` to list profile changes since that prerelease.
+4. Refreshes the release-drafter drafts of both streams with `update-release-drafts.yml`, because a release pushes nothing to `main`. After a stable release that is the highest version of its stream, the draft of that stream no longer lists the pull requests of its release notes. A pre-release does not count as the previous release, and a stable release with a lower version does not change the comparison, so the draft then still lists the changes since the highest stable release.
 
 Only versions with a pre-release suffix, such as `0.8.0-preview.1`, become GitHub pre-releases. Pre-releases and tool releases are never marked as the latest release, so "Latest" always points to a stable profile release. A run that fails partway is completed by re-running its failed jobs or by starting the workflow again for the same commit; nothing that was published is replaced.
+
+Refreshes of the drafts run one after the other. When a newer refresh, such as one for a merge to `main`, replaces the refresh of a release run while it waits, the release run ends "cancelled" although the release was published. Nothing needs to be done once the newer refresh has succeeded. To refresh the drafts by hand, or to complete a failed or cancelled refresh, start "Update release drafts" (`update-release-drafts.yml`) on `main`; a run on another ref changes no draft.
 
 When the profiles need a newer tool, such as for a new template placeholder, the maintainer raises `tool/minimum-tool-version` to the first tool version that supports them, and releases that tool version first. nuget.org lists a new version a few minutes after the push, so a profile release right after a tool release may need to be started again.
 
