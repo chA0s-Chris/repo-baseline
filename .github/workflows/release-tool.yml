@@ -2,9 +2,9 @@ name: Release tool
 
 # The maintainer starts this workflow on main with the version to release, such as 0.1.0. It checks the version and the
 # commit, runs the CI checks, pushes the package that this CI run packed and tested to nuget.org, and then creates the
-# annotated tag tool/v<version> and a GitHub release without assets. A run that fails partway is completed by
-# re-running its failed jobs or by starting it again for the same commit. The scripts in tool/release/ do the work;
-# tests/release/run.sh covers them.
+# annotated tag tool/v<version> and a GitHub release without assets. Finally, it refreshes the release-drafter drafts
+# with update-release-drafts.yml. A run that fails partway is completed by re-running its failed jobs or by starting it
+# again for the same commit. The scripts in tool/release/ do the work; tests/release/run.sh covers them.
 #
 # nuget.org trusts this workflow by its file name and the environment nuget; renaming the file breaks publishing.
 on:
@@ -149,3 +149,13 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         run: bash tool/release/release.sh
+
+  # A release pushes nothing to main, so the drafts are refreshed here, after the release was published. A called
+  # workflow gets no more permissions than its calling job. Besides the release job, this is the only job with
+  # contents: write; it gets what update-release-drafts.yml needs and nothing more.
+  update-release-drafts:
+    needs: release
+    permissions:
+      contents: write
+      pull-requests: read
+    uses: ./.github/workflows/update-release-drafts.yml

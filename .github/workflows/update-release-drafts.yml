@@ -1,20 +1,33 @@
 name: Update release drafts
 
 # Keeps one release-drafter draft per release stream up to date: vNext for the profiles and tool/vNext for the tool.
-# The release workflows render the notes of a release from the same configurations.
+# The release workflows render the notes of a release from the same configurations. It runs on every push to main, when
+# the maintainer starts it on main, and at the end of both release workflows: a release pushes nothing to main, so the
+# drafts would otherwise keep listing the changes of the published release until the next merge.
 on:
   push:
     branches: [ "main" ]
+  workflow_dispatch:
+  workflow_call:
 
 permissions: {}
 
-# Only the newest push matters; a draft update that is still running is replaced.
+# Every refresh renders both drafts from the current state of main. A running refresh is never cancelled, so a release
+# run never ends cancelled because of a merge during its refresh. A queued refresh that a newer one replaces is still
+# cancelled, and a release run waiting with it ends cancelled although its release was published; the newer refresh
+# renders the same drafts. Runs on other refs get their own group: GitHub assigns the group before it evaluates the
+# job's if, so a skipped run would otherwise replace a queued refresh on main.
 concurrency:
-  group: update-release-drafts
-  cancel-in-progress: true
+  group: ${{ github.ref == 'refs/heads/main' && 'update-release-drafts' || format('update-release-drafts-{0}', github.ref) }}
+  cancel-in-progress: false
 
 jobs:
   update:
+    # The drafts are rendered from main only; a run on another ref changes no draft. A called workflow sees the ref of
+    # its caller, and the release workflows run only on main. GitHub compares the strings without regard to case, so a
+    # branch that differs from main only in case would pass; only maintainers can start this workflow, and the
+    # repository has no such branch.
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:
       contents: write
