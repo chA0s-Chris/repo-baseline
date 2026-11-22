@@ -14,7 +14,7 @@
 ## Non-goals
 
 - CI pipeline definitions. GitHub Actions and GitLab CI have their own sharing mechanisms, and their pipelines differ too much.
-- The NUKE build project. Its structure is described in the layout guide, but its code stays repository-specific.
+- The NUKE or Fallout build project. Its structure is described in the layout guide, but its code stays repository-specific.
 - A general-purpose templating engine. Shared files contain no variables (see "Rules for synced content").
 - Automatic creation of pull or merge requests in the first version. Running the tool in a local clone and committing the result is enough to start with.
 - Content specific to an employer or client. This repository is public; such content stays in the repositories that need it.

@@ -45,5 +45,9 @@ nunit-*.xml
 .nuke/*
 !.nuke/parameters.json
 
+# Fallout
+.fallout/*
+!.fallout/parameters.json
+
 # User-specific project settings
 *.user

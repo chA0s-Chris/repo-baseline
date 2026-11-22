@@ -1785,6 +1785,20 @@ expect_file CODESTYLE.md '<!-- BEGIN repo-baseline: code-style -->' "${shared[@]
 run_tool_from "${REAL_BASELINE}" check "${TARGET}" --ref main
 expect_status 0
 
+test_case "real profiles: the ignore rules cover both the NUKE and the Fallout build directories"
+new_empty_target "-real-build-ignores"
+run_tool_from "${REAL_BASELINE}" init "${TARGET}" 1.0.0 --ref main --name Sample.Project --type application --forge github \
+    --repository-url "https://github.com/example/Sample.Project" --target-frameworks net10.0
+expect_status 0
+for line in '.nuke/*' '!.nuke/parameters.json' '.fallout/*' '!.fallout/parameters.json'; do
+    grep -qxF -- "${line}" "${TARGET}/.gitignore" || fail "expected .gitignore to contain ${line}"
+done
+for line in '- ./.nuke' '- ./.fallout'; do
+    grep -qxF -- "${line}" "${TARGET}/.github/copilot-instructions.md" || fail "expected copilot-instructions.md to contain ${line}"
+done
+run_tool_from "${REAL_BASELINE}" check "${TARGET}" --ref main
+expect_status 0
+
 echo
 if [ "${FAILURES}" -eq 0 ]; then
     # A passing run leaves nothing behind. Every fixture is a Git repository, which IDEs pick up as a VCS root.
