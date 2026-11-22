@@ -18,8 +18,10 @@ Decisions referenced as `CS-…`, `BLD-…` and so on are recorded in [decisions
 ├── .github/                      GitHub only
 │   ├── copilot-instructions.md   block
 │   └── workflows/                described
+├── .fallout/
+│   └── parameters.json           described (only with a Fallout build/)
 ├── .nuke/
-│   └── parameters.json           described (only with build/)
+│   └── parameters.json           described (only with a NUKE build/)
 ├── .repo-baseline/               synced
 │   ├── Common.props
 │   ├── Packaging.props           dotnet-nuget only
@@ -65,7 +67,7 @@ Decisions referenced as `CS-…`, `BLD-…` and so on are recorded in [decisions
 └── renovate.json                 created once
 ```
 
-`build.sh`, `build.cmd` and `build.ps1` are added to the root when the repository has a `build/` project.
+When the repository has a `build/` project, the bootstrap scripts are added to the root: `build.sh`, `build.cmd` and `build.ps1` for NUKE, `build.sh` and `build.ps1` for Fallout.
 
 ## Root Files
 
@@ -78,7 +80,7 @@ Decisions referenced as `CS-…`, `BLD-…` and so on are recorded in [decisions
 | `CODESTYLE.md` | block | Human-readable code style. The shared block comes first. Code style rules that apply to the whole repository follow it in the section `Repository-Specific Rules`, not in `AGENTS.md`; a rule that replaces a shared rule names it. Rules for one subtree only, such as `tests/`, may go into a nested `AGENTS.md` there (CS-15). |
 | `cleanup_code.sh` | synced | Applies the `Zorn` cleanup profile to changed, staged and untracked files, or with `--all` to all files of the same types in the solution. Both modes leave Razor and plain XML files out (TOOL-1). |
 | `inspect_code.sh` | synced | Runs ReSharper inspections on changed files, on a branch (`--base`), or on the whole solution (`--all`). Its warnings and errors are what needs fixing; suggestions are ignored (CS-11). Suppressed inspection IDs come from `.repo-baseline.json`, so the script needs `jq`. |
-| `dotnet-tools.json` | created once | In the root for SDK 10 or later, in `.config/dotnet-tools.json` for older SDKs (BLD-5). Contains at least `chaos.repobaseline`, the tool of this baseline, `jetbrains.resharper.globaltools` and `dotnet-coverage`. Repositories add further tools such as `dotnet-ef`. |
+| `dotnet-tools.json` | created once | In the root for SDK 10 or later, in `.config/dotnet-tools.json` for older SDKs (BLD-5). Contains at least `chaos.repobaseline`, the tool of this baseline, `jetbrains.resharper.globaltools` and `dotnet-coverage`. A repository with a Fallout build also pins `fallout.globaltool` in it. Repositories add further tools such as `dotnet-ef`. |
 
 ### Agent instructions
 
@@ -173,14 +175,18 @@ Optional. Contains BenchmarkDotNet projects.
 
 ### `build/`
 
-Optional. Contains the NUKE project that defines the CI/CD pipeline and additional tooling.
+Optional. Contains the build project that defines the CI/CD pipeline and additional tooling. Repositories use either [NUKE](https://nuke.build/) or its successor [Fallout](https://fallout.build/). The profiles support both while any repository still uses NUKE. A repository uses one of them, not both.
 
-- `build/Nuke.csproj` is an executable project with `NukeRootDirectory` and `NukeScriptDirectory` set to `..`, `IsPackable` and `IsPublishable` set to `false`.
+- NUKE: `build/Nuke.csproj` is an executable project with `NukeRootDirectory` and `NukeScriptDirectory` set to `..`, `IsPackable` and `IsPublishable` set to `false`.
+- Fallout: the build project is an executable project with `FalloutRootDirectory` and `FalloutScriptDirectory` set to `..`, `IsPackable` and `IsPublishable` set to `false`. Fallout creates it as `build/_build.csproj` by default; a repository may name it differently.
 - `build/Directory.Build.props` and `build/Directory.Build.targets` deliberately do **not** import the parent files, so the root properties (warnings as errors, target frameworks) do not apply to the pipeline.
 - The pipeline is a partial class `BuildPipeline`, split by concern: `BuildPipeline.cs` (parameters and entry point), `BuildPipeline.Common.cs`, `BuildPipeline.Build.cs`, `BuildPipeline.Test.cs`, `BuildPipeline.Tools.cs`, and depending on the project type `BuildPipeline.NuGet.cs` (packing and publishing packages) or `BuildPipeline.Publish.cs` (publishing applications).
 - The `Test` target runs every test project with the XPlat Code Coverage collector and `coverlet.xml` and writes the merged report to `artifacts/test-coverage/coverage.cobertura.merged.xml`.
-- `.nuke/parameters.json` names the solution; `.nuke/` is otherwise ignored.
-- `build.sh`, `build.cmd` and `build.ps1` at the root bootstrap the pipeline. Use `bash ./build.sh <Target>`.
+- NUKE: `.nuke/parameters.json` names the solution; `.nuke/` is otherwise ignored.
+- Fallout: `.fallout/parameters.json` holds the build parameters, such as the solution; `.fallout/` is otherwise ignored, including the generated `.fallout/build.schema.json`.
+- NUKE: `build.sh`, `build.cmd` and `build.ps1` at the root bootstrap the pipeline.
+- Fallout: `build.sh` and `build.ps1` at the root bootstrap the pipeline. They run `dotnet tool restore` and then `dotnet fallout`, so the local tool manifest must pin `fallout.globaltool`. A repository that wants a `build.cmd` provides its own.
+- Use `bash ./build.sh <Target>` with either tool.
 
 The pipeline code is repository-specific and not synced.
 
