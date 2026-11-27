@@ -1,0 +1,16 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "repo-baseline",
+  "description": "Agent skills for repositories that use the repo-baseline profiles.",
+  "owner": {
+    "name": "Christian Flessa",
+    "url": "https://github.com/chA0s-Chris"
+  },
+  "plugins": [
+    {
+      "name": "repo-baseline",
+      "source": "./plugins/repo-baseline",
+      "description": "Creates a new .NET repository with the repo-baseline tool and the layout guide."
+    }
+  ]
+}

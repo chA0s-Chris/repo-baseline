@@ -238,7 +238,7 @@ A file whose name differs only in case from a file `init` writes, such as `NuGet
 
 `sync` and `check` apply the same rule to synced files and block targets. `sync` renames a file that exists only under another case to its name and then writes it, and writes nothing when several such files exist. `check` reports such a file as `<path>: exists only as <names>`. Names are compared exactly, so `check` reports a case variant on case-insensitive file systems as well. A block target that no selected profile uses is found only by its exact name.
 
-A repository has no tool manifest before `init`, so `init` runs with `dnx Chaos.RepoBaseline init …`, which needs the .NET 10 SDK or later. The `dotnet-tools.json` that `init` creates pins the tool.
+A repository has no tool manifest before `init`, so `init` runs with `dnx Chaos.RepoBaseline@<tool-version> init …`, which needs the .NET 10 SDK or later. The tool version is given because `dnx` may otherwise use the version of a tool manifest in a parent directory. The `dotnet-tools.json` that `init` creates pins the tool.
 
 **Adopting an existing repository:** run `init` to add the missing files, then `sync` to update the synced files and blocks that `init` skipped. An existing `<Name>.slnx.DotSettings` does not get the layer injection automatically, and existing `Directory.Build.props` files do not get the imports of the synced `.props` files; `check` reports both until they are added by hand. `init` also skips an existing `dotnet-tools.json`, so the repository adds the tool to it with `dotnet tool install Chaos.RepoBaseline`.
 
@@ -270,7 +270,7 @@ The first tool version is `0.1.0`, the initial minimum of `tool/minimum-tool-ver
 2. Implement `sync` and `check`, then `init`.
 3. Pilot in two public repositories with different project types: a published library and an application. The pilot also verifies how Rider saves edits to injected settings layers.
 4. Add `check` to their CI, release `v1.0.0`, then adopt the baseline in the remaining repositories one at a time. Reformatting caused by new rules goes into its own commit, which is listed in `.git-blame-ignore-revs`.
-5. Add an agent skill that creates a new repository with `init` and the layout guide.
+5. Add an agent skill that creates a new repository with `init` and the layout guide. The skill `new-repository` of the Claude Code plugin in `plugins/repo-baseline/` already exists: it reads the tool's help, the README and the layout guide of each release, so layout changes during the pilots need no skill change. This step marks when it becomes the standard way to create a repository, not when it is built.
 
 ## Open Questions
 

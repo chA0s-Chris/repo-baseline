@@ -75,6 +75,11 @@ jobs:
       - name: Validate the Renovate preset and configuration
         run: npx --yes --package renovate@44.181.5 -- renovate-config-validator --strict --no-global renovate/default.json renovate.json
 
+      - name: Validate the Claude Code marketplace and plugin
+        run: |
+          npx --yes --package @anthropic-ai/claude-code@2.1.332 -- claude plugin validate --strict .
+          npx --yes --package @anthropic-ai/claude-code@2.1.332 -- claude plugin validate --strict plugins/repo-baseline
+
       - name: Pack the profile release
         env:
           VERSION: ${{ inputs.version }}

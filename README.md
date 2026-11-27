@@ -38,22 +38,34 @@ The tool and the profile content have separate versions: `dotnet-tools.json` pin
 
 ### Setting up a repository
 
-A new repository has no tool manifest yet, so run `init` with `dnx`, which needs the .NET 10 SDK or later. `init` needs the version to record in the manifest and the inputs from the [layout guide](docs/layout-dotnet.md#creating-a-new-repository):
+The quickest way is the agent skill `new-repository` in this repository's Claude Code plugin. It asks for the inputs that `init` needs, runs `init` with the latest release, creates the projects, fills in the local parts, and runs the checks of the layout guide before it asks to create the first commit. It never creates a remote repository or pushes. Install the plugin once, then invoke the skill. It asks for the target directory, which must be new, empty, or a Git repository without commits whose only entry is `.git`, and must not be inside another Git work tree:
+
+```text
+/plugin marketplace add chA0s-Chris/repo-baseline
+/plugin install repo-baseline@repo-baseline
+/repo-baseline:new-repository
+```
+
+To update the plugin, run `claude plugin marketplace update repo-baseline` and `claude plugin update repo-baseline@repo-baseline`.
+
+To set up a repository by hand:
+
+A new repository has no tool manifest yet, so run `init` with `dnx`, which needs the .NET 10 SDK or later. Name the tool version, such as the latest version on [nuget.org](https://www.nuget.org/packages/Chaos.RepoBaseline): without it, `dnx` may use the tool version of a `dotnet-tools.json` in a parent directory. `init` needs the version to record in the manifest and the inputs from the [layout guide](docs/layout-dotnet.md#creating-a-new-repository):
 
 ```bash
 cd ~/src/Chaos.Example
-dnx Chaos.RepoBaseline init . 1.0.0 \
+dnx Chaos.RepoBaseline@0.2.0 init . 1.0.0 \
     --name Chaos.Example --type library --forge github \
     --repository-url https://github.com/chA0s-Chris/Chaos.Example --target-frameworks 'net10.0;net9.0'
 ```
 
 | Option | Meaning |
 | --- | --- |
-| `--name` | Solution name and root namespace: dot-separated C# identifiers. It also names the `.slnx`, its `.DotSettings` file and the strong-name key. |
+| `--name` | Solution name and root namespace: dot-separated C# identifiers. It also names the `.slnx`, its `.DotSettings` file and the strong-name key, so it must be usable as a file name on Windows. |
 | `--type` | `application`, or `library` for a published library, which adds the `dotnet-nuget` profile and a strong-name key |
 | `--forge` | `github` or `gitlab`, which selects the profile of that name. The repository URL must be on `github.com` for GitHub and on another host for GitLab. |
 | `--repository-url` | The `https` URL of the repository in normalized form, without credentials, query, fragment, whitespace or the characters `& < > " '` |
-| `--target-frameworks` | One target framework, or a list separated by semicolons |
+| `--target-frameworks` | One target framework of the form `net<major>.<minor>`, such as `net10.0`, or a list separated by semicolons without duplicates |
 | `--private` | Leaves out the MIT `LICENSE` and its mention in the file header |
 | `--force` | Overwrites existing files, except an existing strong-name key |
 | `--checkout <path>` | Reads the content from the Git tags of a local `repo-baseline` checkout |

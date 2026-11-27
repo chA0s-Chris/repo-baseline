@@ -1,0 +1,12 @@
+{
+  "name": "repo-baseline",
+  "version": "0.1.0",
+  "description": "Creates a new .NET repository with the repo-baseline tool and the layout guide: init, projects, local parts and verification.",
+  "author": {
+    "name": "Christian Flessa",
+    "url": "https://github.com/chA0s-Chris"
+  },
+  "homepage": "https://github.com/chA0s-Chris/repo-baseline",
+  "repository": "https://github.com/chA0s-Chris/repo-baseline",
+  "license": "MIT"
+}
