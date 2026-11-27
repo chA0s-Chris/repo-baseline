@@ -32,7 +32,7 @@ Decisions referenced as `CS-…`, `BLD-…` and so on are recorded in [decisions
 ├── artifacts/                    ignored
 ├── benchmarks/                   optional
 │   ├── AGENTS.md                 described
-│   └── Directory.Build.props     created once
+│   └── Directory.Build.props     described
 ├── build/                        optional, described
 ├── dist/                         optional
 ├── docs/                         optional
@@ -169,7 +169,7 @@ Contains one test project per production project, named `<ProjectUnderTest>.Test
 
 Optional. Contains BenchmarkDotNet projects.
 
-- **`benchmarks/Directory.Build.props`** imports the root file and replaces multi-targeting with a single target: `<TargetFrameworks></TargetFrameworks>` and `<TargetFramework>$(LatestTarget)</TargetFramework>`.
+- **`benchmarks/Directory.Build.props`** imports the root file. In a repository with several target frameworks, it replaces multi-targeting with a single target: `<TargetFrameworks></TargetFrameworks>` and `<TargetFramework>$(LatestTarget)</TargetFramework>`. In a repository with one target framework, it keeps the root `TargetFramework`, because the root file defines no `LatestTarget` there. It sets `IsPackable` to `false`, so the pipeline does not pack the benchmarks.
 - **`benchmarks/AGENTS.md`** contains the benchmark rules.
 - `BenchmarkDotNet.Artifacts/` is ignored.
 
@@ -220,8 +220,10 @@ Required inputs:
 
 Steps:
 
-1. Run `init` with `dnx Chaos.RepoBaseline`, these inputs and the `repo-baseline` version (see the README). It selects the profiles `common`, `dotnet`, `dotnet-nuget` for published libraries, and `github` or `gitlab`. It writes all synced and created-once files, including an empty `<Name>.slnx`, generates the strong-name key for libraries, and adds `.idea/` and the key's file name to the local part of `.gitignore`. A private repository gets no `LICENSE`, and its file header does not mention the MIT license.
+1. Run `init` with `dnx Chaos.RepoBaseline@<tool-version>`, these inputs and the `repo-baseline` version (see the README). It selects the profiles `common`, `dotnet`, `dotnet-nuget` for published libraries, and `github` or `gitlab`. It writes all synced and created-once files, including an empty `<Name>.slnx`, generates the strong-name key for libraries, and adds `.idea/` and the key's file name to the local part of `.gitignore`. A private repository gets no `LICENSE`, and its file header does not mention the MIT license.
 2. Create the projects in `src/` and `tests/` and add them to the existing `<Name>.slnx` with `dotnet sln <Name>.slnx add`.
 3. Fill in the local parts: project description and structure in `AGENTS.md`, the project overview in `src/AGENTS.md`, package metadata in `src/Directory.Build.props`, and the package versions in `Directory.Packages.props`.
 4. Add `build/` and the CI workflow if needed. For published libraries, store the Base64-encoded strong-name key as a CI secret.
-5. Run `dotnet tool restore`, `dotnet build -c Release`, `dotnet test`, `./cleanup_code.sh` and the `check` command. All must succeed before the first commit.
+5. Run `git init` unless the directory already is the root of a Git repository, then `dotnet tool restore`, `dotnet restore <Name>.slnx`, `./cleanup_code.sh`, `dotnet build -c Release <Name>.slnx`, `dotnet test <Name>.slnx` and the `check` command. `cleanup_code.sh` selects files through Git and can rewrite source and project files, so it needs the repository and runs before the build and the tests. All must succeed before the first commit.
+
+The `new-repository` agent skill of this repository's Claude Code plugin follows steps 1–3 and 5 and lists step 4 as manual steps; see the README.

@@ -6,10 +6,10 @@ The tool needs the .NET 10 SDK or later, and Git only for `--checkout`.
 
 ## Installation
 
-The repository pins the tool in its tool manifest, `dotnet-tools.json`. A new repository has no tool manifest yet, so run `init` once with `dnx`; it creates the manifest with the tool:
+The repository pins the tool in its tool manifest, `dotnet-tools.json`. A new repository has no tool manifest yet, so run `init` once with `dnx`; it creates the manifest with the tool. Name the tool version, because `dnx` may otherwise use the version of a `dotnet-tools.json` in a parent directory:
 
 ```bash
-dnx Chaos.RepoBaseline init <path> <version> --name <Name> …
+dnx Chaos.RepoBaseline@<tool-version> init <path> <version> --name <Name> …
 ```
 
 An existing repository adds the tool to its manifest instead, creating the manifest first if it has none:

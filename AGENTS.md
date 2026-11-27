@@ -25,6 +25,8 @@ Read `docs/design.md` before changing anything; it describes profiles, the kinds
 | `renovate/default.json` | The shared Renovate preset, described under "Renovate preset" in `docs/design.md` |
 | `renovate.json` | This repository's own Renovate configuration: the shared preset, limited to GitHub Actions |
 | `.multi-agent.json` | The reviewer models of the multi-agent review skills |
+| `.claude-plugin/marketplace.json` | The Claude Code plugin marketplace of this repository, which lists the plugin in `plugins/repo-baseline/` |
+| `plugins/repo-baseline/` | The Claude Code plugin with the agent skill `new-repository`, which creates a new repository with `init` and the layout guide |
 | `.github/workflows/ci.yml` | CI: runs the commands below on pull requests and pushes to `main`, and packs the profile release archive and the tool |
 | `.github/workflows/release-profiles.yml` | Publishes a profile release; started manually with the version |
 | `.github/workflows/release-tool.yml` | Publishes a tool release to nuget.org; started manually with the version |
@@ -43,6 +45,7 @@ Read `docs/design.md` before changing anything; it describes profiles, the kinds
 | Set up a repository with the profiles of this checkout | `dotnet run --project src/RepoBaseline -- init <path> <version> --name <Name> --type application\|library --forge github\|gitlab --repository-url <url> --target-frameworks <tfm>[;<tfm>…] --checkout .`, optionally with `--private`, `--force` and `--ref <git-ref>` |
 | Sync or check a repository with the profiles of this checkout | `dotnet run --project src/RepoBaseline -- sync <path> --checkout .` or `… check <path> --checkout .`, optionally with `--ref <git-ref>` |
 | Validate the Renovate preset and configuration | `npx --yes --package renovate@44.181.5 -- renovate-config-validator --strict --no-global renovate/default.json renovate.json` |
+| Validate the Claude Code marketplace and plugin | `npx --yes --package @anthropic-ai/claude-code@2.1.332 -- claude plugin validate --strict .` and `… claude plugin validate --strict plugins/repo-baseline` |
 
 The script tests need bash, Git and `jq`. They run the scripts against a stub `dotnet`, so they cover argument handling, file selection and report filtering, but not ReSharper itself.
 
@@ -50,11 +53,11 @@ The tool needs the .NET 10 SDK or later to build, and Git for `--checkout`; its 
 
 The projects set their own build settings. Do not add a `Directory.Build.props` or `Directory.Packages.props` to the repository root: it would also apply to the fixtures under `tmp/`. Warnings are errors only with `-p:TreatWarningsAsErrors=true`, as in CI, so that a new compiler warning never stops the tool in a repository that runs it.
 
-The preset validator needs Node.js; `npx` downloads the pinned Renovate version. Keep `--no-global`, which validates the files as repository configuration instead of self-hosted configuration.
+The preset validator and the plugin validation need Node.js; `npx` downloads the pinned Renovate and Claude Code versions. Keep `--no-global`, which validates the files as repository configuration instead of self-hosted configuration. The plugin validation needs no Claude account.
 
 The release tests need bash, Git, `jq`, GNU `tar`, `gzip` and `sha256sum`. They run the release scripts against stubs of `git`, `gh`, `curl` and `dotnet` with a local bare repository as `origin`, so they need no network access.
 
-CI runs the unit tests, the three test suites and the validation with these commands, checks the workflows with `actionlint`, and packs the profile release archive and the tool as workflow artifacts, with the versions `0.0.0-dev.<short commit>` and `0.0.0-dev.g<short commit>`. The packed-tool test runs against that tool package, which CI passes in `TOOL_PACKAGE_DIR` and `TOOL_PACKAGE_VERSION`; without them, the test packs the tool itself. Keep the workflow and this table in sync.
+CI runs the unit tests, the three test suites, the Renovate validation and the plugin validation with these commands, checks the workflows with `actionlint`, and packs the profile release archive and the tool as workflow artifacts, with the versions `0.0.0-dev.<short commit>` and `0.0.0-dev.g<short commit>`. The packed-tool test runs against that tool package, which CI passes in `TOOL_PACKAGE_DIR` and `TOOL_PACKAGE_VERSION`; without them, the test packs the tool itself. Keep the workflow and this table in sync.
 
 ## Publishing a Release
 
@@ -82,6 +85,7 @@ The release scripts are in `tool/release/`; the workflows pass every input throu
 - Keep `docs/design.md`, `docs/decisions.md` and `docs/layout-*.md` consistent with each other. Reference decisions by their ID (`CS-1`, `BLD-2`, …).
 - Write documentation in plain English with short, precise sentences.
 - Commit messages follow Conventional Commits.
+- The Claude Code plugin in `plugins/repo-baseline/` is served from `main` and belongs to neither release stream; `tool/pack-profiles.sh` does not pack it. Installed plugins update only when `version` in `plugins/repo-baseline/.claude-plugin/plugin.json` changes, so every change to a skill's behavior bumps it: the minor version for new behavior, the patch version for fixes and wording. Its skills read the tool's options and the layout rules from the release they use instead of copying them.
 
 ## Implementation Rules
 
